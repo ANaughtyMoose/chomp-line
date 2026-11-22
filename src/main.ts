@@ -11,8 +11,6 @@ const zoneDot = document.getElementById('zone-dot')!;
 const comboPill = document.getElementById('combo-pill')!;
 const flowFill = document.getElementById('flow-fill')!;
 const flowPct = document.getElementById('flow-pct')!;
-const carveFill = document.getElementById('carve-fill')!;
-const carveState = document.getElementById('carve-state')!;
 const gearBar = document.getElementById('gear-bar')!;
 
 const hudDist = document.getElementById('hud-dist')!;
@@ -88,10 +86,6 @@ const game = new ChompLineGame(canvas, {
     flowFill.style.width = `${data.flow}%`;
     flowFill.classList.toggle('boosting', data.boosting);
     flowPct.textContent = `${data.flow}%`;
-
-    const carvePct = Math.round(data.carveCharge * 100);
-    carveFill.style.width = `${carvePct}%`;
-    carveState.textContent = carvePct >= 55 ? 'Release to Boost!' : 'Carve hard';
 
     zoneName.textContent = data.sectorName;
     zoneDot.style.background = data.sectorColor;

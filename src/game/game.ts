@@ -164,13 +164,13 @@ export class ChompLineGame {
   private lastTime = 0;
   private elapsedTime = 0;
 
-  // Player Physics & Modern Kinetic State
+  // Player Physics & State (Tuned to v1's golden flow-state feel!)
   private playerX = 0;
-  private playerZ = -2.2;
+  private playerZ = -3.8;
   private playerVx = 0;
   private playerY = 0;
   private playerVy = 0;
-  private speed = 16.5;
+  private speed = 14.5;
   private distance = 0;
   private score = 0;
   private bestDistance = 0;
@@ -281,10 +281,10 @@ export class ChompLineGame {
     // Soft luminous winter-lavender mist (keeps snow bright & powdery like the concept art!)
     this.scene.fog = new THREE.FogExp2(0x6c80ad, 0.0032);
 
-    // Intimate diorama snow-globe framing matching the concept art!
+    // Generous downhill sightline (~22m ahead) while preserving the snow-globe Aurora framing!
     this.camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.5, 240);
-    this.camera.position.set(0, 12.8, 31.0);
-    this.camera.lookAt(0, 3.2, -5.0);
+    this.camera.position.set(0, 15.2, 34.5);
+    this.camera.lookAt(0, 3.0, -3.5);
     this.scene.add(this.camera);
 
     // Lush out-of-focus foreground bokeh fairy-light pine framing attached to camera corners
@@ -505,11 +505,11 @@ export class ChompLineGame {
     this.snowTrail.reset();
 
     this.playerX = 0;
-    this.playerZ = -2.2;
+    this.playerZ = -3.8;
     this.playerVx = 0;
     this.playerY = 0;
     this.playerVy = 0;
-    this.speed = 21.5;
+    this.speed = 14.5;
     this.distance = 0;
     this.score = 0;
     this.flow = 100;
@@ -1008,8 +1008,8 @@ export class ChompLineGame {
     }
 
     this.updateAmbientAtmosphere(dt, dz);
-    this.camera.position.set(this.playerX * 0.34, 12.8, 31.0);
-    this.camera.lookAt(this.playerX * 0.24, 3.2, -5.0);
+    this.camera.position.set(this.playerX * 0.34, 15.2, 34.5);
+    this.camera.lookAt(this.playerX * 0.24, 3.0, -3.5);
   }
 
   private updatePlaying(dt: number): void {
@@ -1044,65 +1044,49 @@ export class ChompLineGame {
       if (this.comboTimer <= 0) this.comboMult = 1.0;
     }
 
-    // 2. Modern Carve-Slingshot System!
-    const carvingHard = this.playerY <= 0.08 && !this.grindingRail && Math.abs(steerInput) > 0.58;
-    const carveDir = Math.sign(steerInput);
+    // 2. Smooth Carving Charges Your Flow Tank (No surprise speed surges pushing you into trees!)
+    const carvingHard = this.playerY <= 0.08 && !this.grindingRail && Math.abs(steerInput) > 0.52;
     const magnetLvl = this.upgrades.levels.cocoa_magnet;
+    this.carveCharge = 0;
 
-    if (carvingHard) {
-      const chargeRate = (0.72 + magnetLvl * 0.32) * (this.onIcePond ? 1.85 : 1.0);
-      if (this.lastCarveDir !== 0 && carveDir !== this.lastCarveDir && this.carveCharge >= 0.55) {
-        this.releaseCarveSlingshot();
-      } else {
-        this.carveCharge = Math.min(1.0, this.carveCharge + chargeRate * dt);
-      }
-      this.lastCarveDir = carveDir;
-    } else {
-      if (this.carveCharge >= 0.55 && this.playerY <= 0.08 && !this.grindingRail) {
-        this.releaseCarveSlingshot();
-      } else {
-        this.carveCharge = Math.max(0, this.carveCharge - dt * 1.6);
-      }
-      if (Math.abs(steerInput) < 0.25) this.lastCarveDir = 0;
-    }
-
-    // 3. Exhilarating Accelerating Speed Curve (coupled directly to the Christmas music tempo!)
+    // 3. Golden Flow-State Speed Curve:
+    //    Starts relaxed & buttery (14.5 m/s), steadily accelerates to ~22.5 m/s by 2,000m,
+    //    and YOU control bursts with F / Shift / Click (+10.5 m/s)!
     const isBoosting =
       this.crashStunTimer <= 0 && ((boostHeld && this.flow > 1.5) || this.flowSurgeTimer > 0);
-    // Starts brisk at 22 m/s and steadily accelerates up to 36+ m/s with distance & combo momentum!
-    const distAccel = Math.min(13.5, this.distance / 155);
-    const comboAccel = (this.comboMult - 1.0) * 1.9;
-    const baseCruise = (22.0 + distAccel + comboAccel) * (this.onIcePond ? 1.24 : 1.0);
+    const distAccel = Math.min(8.5, this.distance / 250);
+    const baseCruise = 14.5 + distAccel;
     let targetSpeed = baseCruise;
-    if (brakeKey) targetSpeed *= 0.72;
+    if (brakeKey) targetSpeed *= 0.68;
     if (tuckKey) targetSpeed *= 1.18;
-    if (this.grindingRail) targetSpeed = baseCruise + 9.0;
 
     if (isBoosting) {
-      targetSpeed = Math.max(targetSpeed, baseCruise + 13.5 + magnetLvl * 1.8);
+      targetSpeed = baseCruise + 10.5 + magnetLvl * 1.4;
       if (this.flowSurgeTimer <= 0) {
-        this.flow = Math.max(0, this.flow - 22.0 * dt);
+        this.flow = Math.max(0, this.flow - 20.0 * dt);
       }
     } else {
-      this.flow = Math.min(100, this.flow + (5.5 + (carvingHard ? 6.2 : 0)) * dt);
+      // Carving cleanly refills your Flow Boost meter!
+      const carveRefill = carvingHard ? 7.5 + magnetLvl * 2.5 : 0;
+      this.flow = Math.min(100, this.flow + (5.0 + carveRefill) * dt);
     }
 
     if (this.crashStunTimer > 0) {
       this.crashStunTimer -= dt;
-      targetSpeed = 8.0;
+      targetSpeed = 5.5;
     }
 
-    this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 7.2);
-    // Sync music BPM smoothly to your live downhill speed!
+    this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 6.5);
+    // Sync real Christmas music tempo gently to your skiing speed!
     this.sound.setTempoFromSpeed(this.speed);
 
     const dz = this.speed * dt;
     this.distance += dz;
     this.score += dz * this.comboMult * (isBoosting ? 1.65 : 1.0);
 
-    // Crisp, responsive lateral carving (fast & snappy even on ice!)
-    const latResponsiveness = this.onIcePond ? 10.5 : 15.5;
-    const maxLatSpeed = (isBoosting ? 23.0 : 19.5) * (this.crashStunTimer > 0 ? 0.4 : 1.0);
+    // Crisp, effortless, predictable lateral carving
+    const latResponsiveness = 13.5;
+    const maxLatSpeed = (isBoosting ? 18.5 : 15.5) * (this.crashStunTimer > 0 ? 0.38 : 1.0);
 
     if (this.grindingRail) {
       // Lock cleanly along the festive wooden rail!
@@ -1150,8 +1134,8 @@ export class ChompLineGame {
       }
     }
 
-    // Shift player slightly forward when Yeti is active for awesome framing
-    const desiredZ = this.yetiActive ? -0.6 : -2.2;
+    // Keep generous downhill reaction space even during Yeti chase!
+    const desiredZ = this.yetiActive ? -2.2 : -3.8;
     this.playerZ += (desiredZ - this.playerZ) * Math.min(1, dt * 2.5);
 
     // Update Articulated HD-2D Stop-Motion Skier Puppet (4 Poses + Spring Squash/Stretch + Scarf Wind + 3D Banking!)
@@ -1270,15 +1254,15 @@ export class ChompLineGame {
     const sy = (Math.random() - 0.5) * this.screenShake * 0.8;
     const boostZoom = isBoosting ? 1.6 : 0;
 
-    // Dynamic FOV punch as speed accelerates so you VISCERALLY feel flying down the mountain!
-    const targetFov = 46 + Math.min(10.5, Math.max(0, (this.speed - 20) * 0.42)) + (isBoosting ? 2.5 : 0);
-    this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 5.0);
+    // Subtle FOV acceleration punch as speed builds (46 -> 52 deg)
+    const targetFov = 46 + Math.min(5.5, Math.max(0, (this.speed - 14.5) * 0.28)) + (isBoosting ? 2.0 : 0);
+    this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 4.5);
     this.camera.updateProjectionMatrix();
 
     this.camera.position.x += (this.playerX * 0.4 + sx - this.camera.position.x) * Math.min(1, dt * 5.5);
-    this.camera.position.y += (12.8 - boostZoom * 0.3 + sy - this.camera.position.y) * Math.min(1, dt * 4.5);
-    this.camera.position.z += (31.0 + boostZoom - this.camera.position.z) * Math.min(1, dt * 4.5);
-    this.camera.lookAt(this.playerX * 0.3, 3.2, -5.0);
+    this.camera.position.y += (15.2 - boostZoom * 0.3 + sy - this.camera.position.y) * Math.min(1, dt * 4.5);
+    this.camera.position.z += (34.5 + boostZoom - this.camera.position.z) * Math.min(1, dt * 4.5);
+    this.camera.lookAt(this.playerX * 0.3, 3.0, -3.5);
 
     // Gently sway the foreground bokeh corner pine framing for tactile snow-globe depth
     this.bokehFrame.position.x = -this.playerVx * 0.035;
@@ -1681,8 +1665,8 @@ export class ChompLineGame {
     }
 
     const targetX = this.yetiTargetDecoy ? this.yetiTargetDecoy.x : this.playerX;
-    // Fast, thrilling 2,000m Yeti pursuit — hold F / Click or chain Slalom Gates to outrun!
-    const baseYetiSpeed = 33.5 + Math.min(9.5, (this.distance - 2000) / 520);
+    // Fast, fair 2,000m Yeti pursuit — faster than cruise (22.5), cleanly outrunnable with Boost (33+)!
+    const baseYetiSpeed = 25.8 + Math.min(5.5, (this.distance - 2000) / 700);
     const relativeDz = (baseYetiSpeed - this.speed) * dt;
 
     this.yetiZ = Math.max(-22.5, this.yetiZ + relativeDz);

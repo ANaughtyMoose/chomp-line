@@ -65,9 +65,9 @@ export class SoundEngine {
   }
 
   public setTempoFromSpeed(speedMps: number): void {
-    // Smoothly accelerate the real recorded Christmas music from 0.98x -> 1.24x as speed climbs!
-    const norm = Math.max(0, Math.min(1, (speedMps - 20) / 26));
-    this.targetRate = 0.98 + norm * 0.26;
+    // Smoothly accelerate the real recorded Christmas music from 0.96x -> 1.22x across our 14.5..34 m/s range!
+    const norm = Math.max(0, Math.min(1, (speedMps - 14.5) / 19.5));
+    this.targetRate = 0.96 + norm * 0.26;
     const active = this.chaseMode ? this.chaseAudio : this.cruiseAudio;
     if (Math.abs(active.playbackRate - this.targetRate) > 0.015) {
       active.playbackRate = this.targetRate;
