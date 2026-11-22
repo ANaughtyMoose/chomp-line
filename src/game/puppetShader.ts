@@ -79,8 +79,8 @@ export function createSkierPuppetMaterial(tex: THREE.Texture): {
       void main() {
         vec4 texel = texture2D(uMap, vUv);
         if (texel.a < 0.12) discard;
-        // True, warm matte felt/wool colors — zero plastic sheen or artificial glow wash
-        gl_FragColor = vec4(texel.rgb * 1.06, texel.a);
+        // True painted felt/wool colors (OutputPass handles linear -> sRGB + ACES tone mapping!)
+        gl_FragColor = vec4(texel.rgb, texel.a);
       }
     `,
   });
@@ -158,9 +158,10 @@ export function createYetiPuppetMaterial(tex: THREE.Texture): {
       void main() {
         vec4 texel = texture2D(uMap, vUv);
         if (texel.a < 0.12) discard;
-        vec3 col = texel.rgb * 1.08;
-        float isLight = smoothstep(0.82, 0.99, max(texel.r, max(texel.g, texel.b)));
-        col += texel.rgb * isLight * (0.08 + 0.08 * sin(uTime * 10.0 + vUv.x * 16.0));
+        vec3 col = texel.rgb;
+        float isLight = smoothstep(0.78, 0.98, max(texel.r, max(texel.g, texel.b)));
+        // Subtle HDR twinkle on his tangled Christmas lights so UnrealBloomPass catches them!
+        col += texel.rgb * isLight * (0.45 + 0.35 * sin(uTime * 10.0 + vUv.x * 16.0));
         gl_FragColor = vec4(col, texel.a);
       }
     `,

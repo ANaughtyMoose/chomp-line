@@ -26,10 +26,14 @@ body,
 #app {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
   background: #0a1428;
   font-family: var(--font-ui);
   color: #f5f9ff;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #game-canvas {
@@ -38,6 +42,7 @@ body,
   width: 100%;
   height: 100%;
   display: block;
+  touch-action: none;
   cursor: crosshair;
 }
 
@@ -45,15 +50,15 @@ body,
   display: none !important;
 }
 
-/* Top-Left HUD */
+/* Top-Left HUD (iPhone Safe-Area Aware!) */
 .hud-left {
   position: fixed;
-  top: 20px;
-  left: 22px;
+  top: max(16px, env(safe-area-inset-top));
+  left: max(16px, env(safe-area-inset-left));
   z-index: 25;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   pointer-events: none;
 }
 
@@ -206,16 +211,16 @@ body,
   color: var(--gold);
 }
 
-/* Top-Right Modern Frosted-Glass & Brushed Brass Badge */
+/* Top-Right Modern Frosted-Glass & Brushed Brass Badge (iPhone Safe-Area Aware!) */
 .hud-right {
   position: fixed;
-  top: 20px;
-  right: 22px;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
   z-index: 25;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 9px;
+  gap: 8px;
 }
 
 .brass-badge {
@@ -572,7 +577,13 @@ body,
   transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
 }
 
-.primary-btn:hover {
+.primary-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  transform: none;
+}
+
+.primary-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   filter: brightness(1.08);
   box-shadow: 0 16px 36px rgba(235, 60, 90, 0.62);
@@ -814,9 +825,144 @@ body,
   color: #fff7e4;
 }
 
+/* Mobile / iPhone Ergonomic Thumb Controls */
+.touch-controls {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 32;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.touch-left,
+.touch-right {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.touch-steer-hint {
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: rgba(11, 21, 42, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(232, 245, 255, 0.85);
+  transition: opacity 0.5s ease;
+}
+
+.touch-btn {
+  pointer-events: auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid rgba(246, 220, 155, 0.72);
+  background: rgba(14, 26, 52, 0.72);
+  backdrop-filter: blur(12px);
+  color: #fffaf0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.42);
+  touch-action: none;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+
+.touch-btn.boost {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(160deg, rgba(232, 58, 88, 0.85), rgba(176, 24, 52, 0.88));
+}
+
+.touch-btn.jump {
+  background: linear-gradient(160deg, rgba(24, 165, 167, 0.82), rgba(14, 110, 132, 0.86));
+}
+
+.touch-btn.active,
+.touch-btn:active {
+  transform: scale(0.92);
+  filter: brightness(1.18);
+}
+
+.touch-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.touch-lbl {
+  font-family: var(--font-num);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 @media (max-width: 720px) {
-  .upgrade-cards,
-  .controls-grid {
+  .desktop-only {
+    display: none;
+  }
+  .upgrade-cards {
     grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .upgrade-modal {
+    padding: 20px 16px;
+    max-height: 88dvh;
+    overflow-y: auto;
+  }
+  .upgrade-card {
+    padding: 14px 15px;
+    gap: 5px;
+  }
+  .upgrade-icon {
+    font-size: 26px;
+  }
+  .upgrade-name {
+    font-size: 17px;
+  }
+  .controls-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .title-card,
+  .pass-card {
+    padding: 22px 18px;
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+  .meter-card {
+    width: 172px;
+    padding: 8px 10px;
+  }
+  .sector-pill {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+  .brass-badge {
+    min-width: 146px;
+    padding: 8px 11px;
+  }
+  .badge-val {
+    font-size: 15px;
+  }
+  .badge-key {
+    font-size: 10px;
+  }
+  .badge-sub {
+    font-size: 10px;
+  }
+  .yeti-alert {
+    top: calc(max(16px, env(safe-area-inset-top)) + 104px);
+    font-size: 11px;
+    padding: 7px 14px;
+    max-width: 92vw;
+    text-align: center;
   }
 }

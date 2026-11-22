@@ -1,17 +1,21 @@
 /**
- * Real Recorded Royalty-Free Christmas Music + Tactile Alpine Snow SFX!
+ * iOS/iPhone-Safe Real Recorded Royalty-Free Christmas Music + Tactile Alpine Snow SFX!
  *
  * Music Credits (CC BY 4.0 — Kevin MacLeod, incompetech.com):
- *  - Cruising: "Deck the Halls B" (peppy, joyful holiday band)
+ *  - Cruising: "Deck the Halls B" (upbeat, joyful holiday band)
  *  - 2,000m Yeti Chase: "Jingle Bells" (fast, manic stage-production sleigh chase)
  *
- * Uses HTMLAudioElement with preservesPitch=true so playbackRate dynamically accelerates
- * smoothly with your skiing speed without chipmunking the pitch!
+ * iPhone/Safari fixes:
+ *  - preload = 'none' (does NOT burn 15.6 MB at initial page load; loads cleanly on first play)
+ *  - Routes music through Web Audio GainNode where supported so volume & ducking work on iOS Safari!
+ *  - Smoothly damps playbackRate updates so there's zero tempo wobble
+ *  - Adds telegraphed Yeti snowball throw whistle SFX
  */
 
 export class SoundEngine {
   private ctx: AudioContext | null = null;
   private sfxBus: GainNode | null = null;
+  private musicGain: GainNode | null = null;
   private carveGain: GainNode | null = null;
   private carveFilter: BiquadFilterNode | null = null;
   private windGain: GainNode | null = null;
@@ -19,24 +23,26 @@ export class SoundEngine {
 
   private cruiseAudio: HTMLAudioElement;
   private chaseAudio: HTMLAudioElement;
+  private mediaNodesConnected = false;
 
   private musicMuted = false;
   private sfxMuted = false;
   private chaseMode = false;
   private musicActive = false;
-  private targetRate = 1.0;
+  private musicDucked = false;
+  private currentRate = 1.0;
 
   constructor() {
-    this.cruiseAudio = this.makeTrack('/audio/cruise_xmas.mp3', 0.36);
-    this.chaseAudio = this.makeTrack('/audio/chase_xmas.mp3', 0.42);
+    this.cruiseAudio = this.makeTrack('/audio/cruise_xmas.mp3');
+    this.chaseAudio = this.makeTrack('/audio/chase_xmas.mp3');
   }
 
-  private makeTrack(src: string, volume: number): HTMLAudioElement {
+  private makeTrack(src: string): HTMLAudioElement {
     const a = new Audio(src);
     a.loop = true;
-    a.preload = 'auto';
-    a.volume = volume;
-    // Preserve natural musical pitch while smoothly accelerating BPM!
+    a.preload = 'none'; // Don't waste 15.6 MB before Play is pressed!
+    a.crossOrigin = 'anonymous';
+    a.setAttribute('playsinline', '');
     const anyA = a as HTMLAudioElement & {
       preservesPitch?: boolean;
       webkitPreservesPitch?: boolean;
@@ -57,6 +63,12 @@ export class SoundEngine {
       this.sfxBus = this.ctx.createGain();
       this.sfxBus.gain.value = this.sfxMuted ? 0 : 0.52;
       this.sfxBus.connect(this.ctx.destination);
+
+      this.musicGain = this.ctx.createGain();
+      this.musicGain.gain.value = this.musicMuted ? 0 : 0.36;
+      this.musicGain.connect(this.ctx.destination);
+
+      this.connectMusicElements();
       this.initAmbientSnowAudio();
     }
     if (this.ctx.state === 'suspended') {
@@ -64,21 +76,49 @@ export class SoundEngine {
     }
   }
 
+  private connectMusicElements(): void {
+    if (!this.ctx || !this.musicGain || this.mediaNodesConnected) return;
+    try {
+      const src1 = this.ctx.createMediaElementSource(this.cruiseAudio);
+      const src2 = this.ctx.createMediaElementSource(this.chaseAudio);
+      src1.connect(this.musicGain);
+      src2.connect(this.musicGain);
+      this.mediaNodesConnected = true;
+    } catch {
+      // Fallback if MediaElementSource fails on a restricted WebView
+      this.cruiseAudio.volume = 0.36;
+      this.chaseAudio.volume = 0.42;
+    }
+  }
+
+  private applyMusicVolume(): void {
+    const base = this.chaseMode ? 0.42 : 0.36;
+    const target = this.musicMuted ? 0 : this.musicDucked ? base * 0.35 : base;
+    if (this.musicGain && this.ctx && this.mediaNodesConnected) {
+      this.musicGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.08);
+    } else {
+      this.cruiseAudio.muted = this.musicMuted;
+      this.chaseAudio.muted = this.musicMuted;
+      this.cruiseAudio.volume = target;
+      this.chaseAudio.volume = target;
+    }
+  }
+
   public setTempoFromSpeed(speedMps: number): void {
-    // Smoothly accelerate the real recorded Christmas music from 0.96x -> 1.22x across our 14.5..34 m/s range!
-    const norm = Math.max(0, Math.min(1, (speedMps - 14.5) / 19.5));
-    this.targetRate = 0.96 + norm * 0.26;
+    // Smoothly damp tempo changes so real audio never wobbles on brief micro-changes
+    const norm = Math.max(0, Math.min(1, (speedMps - 14.5) / 20));
+    const desired = 0.96 + norm * 0.24;
+    this.currentRate += (desired - this.currentRate) * 0.06;
     const active = this.chaseMode ? this.chaseAudio : this.cruiseAudio;
-    if (Math.abs(active.playbackRate - this.targetRate) > 0.015) {
-      active.playbackRate = this.targetRate;
+    if (Math.abs(active.playbackRate - this.currentRate) > 0.025) {
+      active.playbackRate = Number(this.currentRate.toFixed(3));
     }
   }
 
   public toggleMusic(): boolean {
     this.unlock();
     this.musicMuted = !this.musicMuted;
-    this.cruiseAudio.muted = this.musicMuted;
-    this.chaseAudio.muted = this.musicMuted;
+    this.applyMusicVolume();
     if (!this.musicMuted && this.musicActive) {
       const active = this.chaseMode ? this.chaseAudio : this.cruiseAudio;
       active.play().catch(() => {});
@@ -98,18 +138,17 @@ export class SoundEngine {
   public startMusic(chase: boolean): void {
     this.musicActive = true;
     this.chaseMode = chase;
-    this.cruiseAudio.muted = this.musicMuted;
-    this.chaseAudio.muted = this.musicMuted;
+    this.applyMusicVolume();
 
     if (chase) {
       this.cruiseAudio.pause();
       this.chaseAudio.currentTime = 0;
-      this.chaseAudio.playbackRate = this.targetRate;
+      this.chaseAudio.playbackRate = this.currentRate;
       if (!this.musicMuted) this.chaseAudio.play().catch(() => {});
     } else {
       this.chaseAudio.pause();
       this.cruiseAudio.currentTime = 0;
-      this.cruiseAudio.playbackRate = this.targetRate;
+      this.cruiseAudio.playbackRate = this.currentRate;
       if (!this.musicMuted) this.cruiseAudio.play().catch(() => {});
     }
   }
@@ -117,16 +156,17 @@ export class SoundEngine {
   public setChaseMode(chase: boolean): void {
     if (this.chaseMode === chase) return;
     this.chaseMode = chase;
+    this.applyMusicVolume();
     if (!this.musicActive) return;
 
     if (chase) {
       this.cruiseAudio.pause();
       this.chaseAudio.currentTime = 0;
-      this.chaseAudio.playbackRate = this.targetRate;
+      this.chaseAudio.playbackRate = this.currentRate;
       if (!this.musicMuted) this.chaseAudio.play().catch(() => {});
     } else {
       this.chaseAudio.pause();
-      this.cruiseAudio.playbackRate = this.targetRate;
+      this.cruiseAudio.playbackRate = this.currentRate;
       if (!this.musicMuted) this.cruiseAudio.play().catch(() => {});
     }
   }
@@ -145,13 +185,13 @@ export class SoundEngine {
   public resumeMusic(): void {
     if (!this.musicActive || this.musicMuted) return;
     const active = this.chaseMode ? this.chaseAudio : this.cruiseAudio;
-    active.playbackRate = this.targetRate;
+    active.playbackRate = this.currentRate;
     active.play().catch(() => {});
   }
 
   public setMusicDucked(ducked: boolean): void {
-    this.cruiseAudio.volume = ducked ? 0.14 : 0.36;
-    this.chaseAudio.volume = ducked ? 0.16 : 0.42;
+    this.musicDucked = ducked;
+    this.applyMusicVolume();
   }
 
   private initAmbientSnowAudio(): void {
@@ -266,21 +306,22 @@ export class SoundEngine {
     osc.stop(start + dur + 0.02);
   }
 
-  public playSlingshot(): void {
+  public playSnowballThrow(): void {
     if (!this.ctx || !this.sfxBus) return;
     const now = this.ctx.currentTime;
+    // Crisp descending icy whistle telegraphing an incoming Yeti snowball!
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(360, now);
-    osc.frequency.exponentialRampToValueAtTime(980, now + 0.16);
-    g.gain.setValueAtTime(0.16, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(920, now);
+    osc.frequency.exponentialRampToValueAtTime(340, now + 0.28);
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.linearRampToValueAtTime(0.16, now + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
     osc.connect(g);
     g.connect(this.sfxBus);
     osc.start(now);
-    osc.stop(now + 0.24);
-    this.playSleighBell(now + 0.02, 0.09);
+    osc.stop(now + 0.32);
   }
 
   public playGateChime(combo: number): void {

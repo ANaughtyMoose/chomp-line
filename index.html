@@ -2,9 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>CHOMP LINE — Alpine Holiday Escape</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❄️</text></svg>" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❄️</text></svg>"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,7 +24,7 @@
     <div id="app">
       <canvas id="game-canvas"></canvas>
 
-      <!-- Top-Left: Mountain Sector, Carve/Flow Meter & Active Build -->
+      <!-- Top-Left: Mountain Sector, Flow Meter, Yeti Lead & Active Build -->
       <div id="hud-left" class="hud-left hidden">
         <div class="sector-pill">
           <span class="sector-dot" id="zone-dot"></span>
@@ -26,7 +34,7 @@
 
         <div class="meter-card">
           <div class="meter-row">
-            <span class="meter-label">Flow Boost <kbd>F</kbd> / Click</span>
+            <span class="meter-label">Flow Boost <kbd class="desktop-only">F</kbd></span>
             <span class="meter-val" id="flow-pct">100%</span>
           </div>
           <div class="meter-track">
@@ -34,7 +42,7 @@
           </div>
 
           <div class="meter-row sub-meter">
-            <span class="meter-label" id="chomp-label">To 2,000m Chomp Line</span>
+            <span class="meter-label" id="chomp-label">Yeti Lead</span>
             <span class="meter-val subtle" id="chomp-dist">2,000 m</span>
           </div>
           <div class="meter-track thin">
@@ -54,7 +62,7 @@
           </div>
           <div class="badge-row">
             <span class="badge-key">SPEED</span>
-            <span class="badge-val" id="hud-speed">36 mph</span>
+            <span class="badge-val" id="hud-speed">32 mph</span>
           </div>
           <div class="badge-sub">
             <span id="hud-score">0 pts</span>
@@ -70,52 +78,73 @@
         </div>
       </div>
 
-      <!-- Yeti Encounter Banner (Modern Cinematic Pill) -->
-      <div id="yeti-alert" class="yeti-alert hidden">
-        <span class="yeti-pulse"></span>
-        <span id="yeti-alert-text">Yeti Ambush — Lure into a Bonfire or Carve-Boost past!</span>
+      <!-- Mobile / iPhone Ergonomic Touch Controls (visible on touch devices during play) -->
+      <div id="touch-controls" class="touch-controls hidden">
+        <div class="touch-left">
+          <button id="touch-decoy" class="touch-btn decoy hidden" type="button">
+            <span class="touch-emoji">⛄</span>
+            <span class="touch-lbl" id="touch-decoy-lbl">DECOY</span>
+          </button>
+          <div class="touch-steer-hint" id="touch-steer-hint">Slide thumb to carve</div>
+        </div>
+        <div class="touch-right">
+          <button id="touch-jump" class="touch-btn jump" type="button">
+            <span class="touch-emoji">✨</span>
+            <span class="touch-lbl">JUMP</span>
+          </button>
+          <button id="touch-boost" class="touch-btn boost" type="button">
+            <span class="touch-emoji">🔥</span>
+            <span class="touch-lbl">BOOST</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Cinematic Milestone Banner (Replaces jarring retro fullscreen popup) -->
+      <!-- Yeti Alert Banner -->
+      <div id="yeti-alert" class="yeti-alert hidden">
+        <span class="yeti-pulse"></span>
+        <span id="yeti-alert-text">THE CHOMP LINE — Boost to Outrun the Yeti!</span>
+      </div>
+
+      <!-- Cinematic Milestone Banner -->
       <div id="milestone-banner" class="milestone-banner hidden">
         <div class="milestone-eyebrow" id="milestone-eyebrow">2,000 METERS</div>
         <div class="milestone-title" id="milestone-title">THE CHOMP LINE</div>
-        <div class="milestone-sub" id="milestone-sub">Hold F or Click to Boost — Outplay the Yeti!</div>
+        <div class="milestone-sub" id="milestone-sub">Hold F or Boost to Outrun the Yeti!</div>
       </div>
 
-      <!-- Floating Trick / Combo / Outplay Toasts -->
+      <!-- Floating Trick / Combo / Bonus Toasts -->
       <div id="toast-layer" class="toast-layer"></div>
 
-      <!-- Title Overlay (Elegant translucent glass over the live stop-motion snow-globe diorama) -->
+      <!-- Title Overlay -->
       <div id="title-screen" class="overlay-screen">
         <div class="title-card">
           <div class="title-eyebrow">WINTER DIORAMA ALPINE ESCAPE</div>
           <h1 class="title-logo">Chomp Line</h1>
           <p class="title-sub">
-            Carve through an illuminated Christmas snow-globe mountain, slice candy-cane slalom gates, draft Lodge gear, and outrun the Yeti past <strong>2,000 meters</strong>.
+            Carve through an illuminated Christmas snow-globe mountain, slice yellow candy-cane gates, protect your lead, and outrun the Yeti past <strong>2,000 meters</strong>.
           </p>
 
           <div class="controls-grid">
             <div class="ctrl-item">
-              <span class="ctrl-keys">Mouse or ← → / A D</span>
-              <span class="ctrl-desc">Carve &amp; Steer (↑ Brake, ↓ Tuck)</span>
+              <span class="ctrl-keys">Drag / Mouse / ← →</span>
+              <span class="ctrl-desc">Carve &amp; Steer</span>
             </div>
             <div class="ctrl-item">
-              <span class="ctrl-keys">Space</span>
-              <span class="ctrl-desc">Jump &amp; Mogul Spin Tricks</span>
+              <span class="ctrl-keys">Space / Jump Button</span>
+              <span class="ctrl-desc">Hop &amp; Hold for 360° Spin</span>
             </div>
             <div class="ctrl-item">
-              <span class="ctrl-keys">Hold F / Shift / Click</span>
-              <span class="ctrl-desc">Flow Boost (Outrun the Yeti)</span>
+              <span class="ctrl-keys">F / Click / Boost</span>
+              <span class="ctrl-desc">Flow Boost (Outrun Yeti)</span>
             </div>
             <div class="ctrl-item">
-              <span class="ctrl-keys">E</span>
+              <span class="ctrl-keys">E / ⛄ Button</span>
               <span class="ctrl-desc">Drop Decoy Snowman</span>
             </div>
           </div>
 
           <div class="title-cta-row">
-            <button id="btn-play" class="primary-btn">Drop In &amp; Ski</button>
+            <button id="btn-play" class="primary-btn" disabled>Loading Snow Globe…</button>
           </div>
           <div class="title-best" id="title-best">Best Descent: 0 m</div>
         </div>
@@ -126,7 +155,7 @@
         <div class="upgrade-modal">
           <div class="upgrade-eyebrow" id="upgrade-eyebrow">ALPINE LODGE • 650 m</div>
           <h2 class="upgrade-title">Choose Your Mountain Gear</h2>
-          <p class="upgrade-hint">Click a card or press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></p>
+          <p class="upgrade-hint">Tap a card<span class="desktop-only"> or press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></span></p>
           <div class="upgrade-cards" id="upgrade-cards"></div>
         </div>
       </div>
@@ -143,7 +172,7 @@
         </div>
       </div>
 
-      <!-- Game Over / Modern Alpine Season Pass Summary -->
+      <!-- Game Over / Season Pass Summary -->
       <div id="gameover-screen" class="overlay-screen hidden">
         <div class="pass-card">
           <div class="pass-header">
@@ -152,7 +181,7 @@
           </div>
           <h2 class="pass-headline" id="pass-headline">Caught by the Yeti</h2>
           <p class="pass-flavor" id="pass-flavor">
-            Pro tip: Snap out of sharp turns for free Carve Slingshots, grind wooden fences, and lure the Yeti straight into roaring Yule bonfires!
+            Pro tip: Clean runs protect your Yeti Lead all the way to 2,000m—chain yellow candy-cane gates &amp; mogul 360° spins to keep your Flow Boost full!
           </p>
 
           <div class="stats-grid">
@@ -165,7 +194,7 @@
               <div class="stat-value" id="stat-score">0</div>
             </div>
             <div class="stat-box">
-              <div class="stat-label">Tricks &amp; Outplays</div>
+              <div class="stat-label">Gates &amp; Tricks</div>
               <div class="stat-value" id="stat-tricks">0</div>
             </div>
             <div class="stat-box">
@@ -177,7 +206,7 @@
           <div class="pass-gear" id="pass-gear"></div>
 
           <div class="title-cta-row">
-            <button id="btn-retry" class="primary-btn">One More Run (Space)</button>
+            <button id="btn-retry" class="primary-btn">One More Run</button>
           </div>
         </div>
       </div>

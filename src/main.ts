@@ -21,6 +21,13 @@ const hudSpeed = document.getElementById('hud-speed')!;
 const hudScore = document.getElementById('hud-score')!;
 const hudBest = document.getElementById('hud-best')!;
 
+const touchControls = document.getElementById('touch-controls')!;
+const touchJump = document.getElementById('touch-jump')!;
+const touchBoost = document.getElementById('touch-boost')!;
+const touchDecoy = document.getElementById('touch-decoy')!;
+const touchDecoyLbl = document.getElementById('touch-decoy-lbl')!;
+const touchSteerHint = document.getElementById('touch-steer-hint')!;
+
 const yetiAlert = document.getElementById('yeti-alert')!;
 const yetiAlertText = document.getElementById('yeti-alert-text')!;
 const milestoneBanner = document.getElementById('milestone-banner')!;
@@ -45,13 +52,18 @@ const statTricks = document.getElementById('stat-tricks')!;
 const statBest = document.getElementById('stat-best')!;
 const passGear = document.getElementById('pass-gear')!;
 
-const btnPlay = document.getElementById('btn-play')!;
+const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
 const btnResume = document.getElementById('btn-resume')!;
 const btnRestartPause = document.getElementById('btn-restart-pause')!;
 const btnRetry = document.getElementById('btn-retry')!;
 const btnMusic = document.getElementById('btn-music')!;
 const btnSfx = document.getElementById('btn-sfx')!;
 const btnPause = document.getElementById('btn-pause')!;
+
+const isTouchDevice =
+  window.matchMedia('(pointer: coarse)').matches ||
+  'ontouchstart' in window ||
+  navigator.maxTouchPoints > 0;
 
 function renderGearChips(container: HTMLElement, upgrades: UpgradeState): void {
   const active = UPGRADE_CATALOG.filter((u) => upgrades.levels[u.id] > 0);
@@ -63,7 +75,7 @@ function renderGearChips(container: HTMLElement, upgrades: UpgradeState): void {
     .map((u) => {
       let extra = `Lv ${upgrades.levels[u.id]}`;
       if (u.id === 'bauble_shield') extra = `×${upgrades.shields}`;
-      if (u.id === 'decoy_snowman') extra = `×${upgrades.decoyCharges} [E]`;
+      if (u.id === 'decoy_snowman') extra = `×${upgrades.decoyCharges}`;
       return `<div class="gear-chip"><span>${u.icon}</span><span>${u.name}</span><span class="gear-lvl">${extra}</span></div>`;
     })
     .join('');
@@ -71,6 +83,7 @@ function renderGearChips(container: HTMLElement, upgrades: UpgradeState): void {
 
 let lastGearHash = '';
 let milestoneTimeout: number | null = null;
+let touchHintHidden = false;
 
 const game = new ChompLineGame(canvas, {
   onHudUpdate(data) {
@@ -90,16 +103,18 @@ const game = new ChompLineGame(canvas, {
     flowFill.classList.toggle('boosting', data.boosting);
     flowPct.textContent = `${data.flow}%`;
 
-    const toChomp = Math.max(0, 2000 - data.distance);
-    const chompPct = Math.min(100, (data.distance / 2000) * 100);
-    chompFill.style.width = `${chompPct}%`;
-    chompFill.classList.toggle('active', toChomp === 0);
-    if (toChomp > 0) {
-      chompLabel.textContent = 'To 2,000m Chomp Line';
-      chompDist.textContent = `${toChomp.toLocaleString()} m`;
-    } else {
+    // Show real Yeti Lead bar before chase, turning ACTIVE once Yeti is on your tail!
+    if (data.yetiActive) {
       chompLabel.textContent = 'The Chomp Line';
       chompDist.textContent = 'ACTIVE';
+      chompFill.style.width = '100%';
+      chompFill.classList.add('active');
+    } else {
+      chompLabel.textContent = 'Yeti Lead';
+      chompDist.textContent = `${Math.max(0, Math.round(data.yetiLeadMeters))} m`;
+      const pct = Math.max(0, Math.min(100, (data.yetiLeadMeters / 2000) * 100));
+      chompFill.style.width = `${pct}%`;
+      chompFill.classList.toggle('active', data.yetiLeadMeters < 350);
     }
 
     zoneName.textContent = data.sectorName;
@@ -111,6 +126,16 @@ const game = new ChompLineGame(canvas, {
 
     yetiAlert.classList.toggle('hidden', !data.yetiActive);
     yetiAlertText.textContent = data.yetiAlertText;
+
+    // Show touch decoy button whenever player has charges
+    const hasDecoy = data.upgrades.decoyCharges > 0;
+    touchDecoy.classList.toggle('hidden', !hasDecoy);
+    if (hasDecoy) touchDecoyLbl.textContent = `×${data.upgrades.decoyCharges}`;
+
+    if (!touchHintHidden && data.distance > 120) {
+      touchHintHidden = true;
+      touchSteerHint.style.opacity = '0';
+    }
 
     const hash = `${JSON.stringify(data.upgrades.levels)}-${data.upgrades.shields}-${data.upgrades.decoyCharges}`;
     if (hash !== lastGearHash) {
@@ -136,7 +161,7 @@ const game = new ChompLineGame(canvas, {
     if (milestoneTimeout !== null) window.clearTimeout(milestoneTimeout);
     milestoneTimeout = window.setTimeout(() => {
       milestoneBanner.classList.add('hidden');
-    }, 2900);
+    }, 2800);
   },
 
   onShowUpgradeDraft(distance, choices: UpgradeDef[]) {
@@ -146,7 +171,7 @@ const game = new ChompLineGame(canvas, {
       const btn = document.createElement('button');
       btn.className = 'upgrade-card';
       btn.innerHTML = `
-        <span class="upgrade-key">${idx + 1}</span>
+        <span class="upgrade-key desktop-only">${idx + 1}</span>
         <div class="upgrade-icon">${def.icon}</div>
         <div class="upgrade-tag">${def.tag}</div>
         <div class="upgrade-name">${def.name}</div>
@@ -173,12 +198,18 @@ const game = new ChompLineGame(canvas, {
   },
 
   onModeChange(mode: GameMode) {
+    if (mode !== 'loading') {
+      btnPlay.disabled = false;
+      btnPlay.textContent = 'Drop In & Ski';
+    }
+
     const showHud = mode === 'playing' || mode === 'upgrading' || mode === 'paused';
     hudLeft.classList.toggle('hidden', !showHud);
     hudRight.classList.toggle('hidden', !showHud);
+    touchControls.classList.toggle('hidden', !(isTouchDevice && mode === 'playing'));
     if (mode !== 'playing') yetiAlert.classList.add('hidden');
 
-    titleScreen.classList.toggle('hidden', mode !== 'title');
+    titleScreen.classList.toggle('hidden', mode !== 'title' && mode !== 'loading');
     upgradeScreen.classList.toggle('hidden', mode !== 'upgrading');
     pauseScreen.classList.toggle('hidden', mode !== 'paused');
     gameoverScreen.classList.toggle('hidden', mode !== 'gameover');
@@ -191,7 +222,9 @@ const game = new ChompLineGame(canvas, {
 
 titleBest.textContent = `Best Descent: ${game.getBestDistance().toLocaleString()} m`;
 
-btnPlay.addEventListener('click', () => game.startNewRun());
+btnPlay.addEventListener('click', () => {
+  if (game.getMode() === 'title') game.startNewRun();
+});
 btnResume.addEventListener('click', () => game.resumeGame());
 btnRestartPause.addEventListener('click', () => game.startNewRun());
 btnRetry.addEventListener('click', () => game.startNewRun());
@@ -210,4 +243,38 @@ btnSfx.addEventListener('click', () => {
   const muted = game.sound.toggleSfx();
   btnSfx.textContent = muted ? '🔇' : '🔊';
   btnSfx.classList.toggle('muted', muted);
+});
+
+// Ergonomic iPhone / Touch Button Bindings (multi-touch friendly!)
+const bindHoldBtn = (el: HTMLElement, onDown: () => void, onUp: () => void) => {
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    el.classList.add('active');
+    onDown();
+  });
+  const release = (e: Event) => {
+    e.preventDefault();
+    el.classList.remove('active');
+    onUp();
+  };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('pointerleave', release);
+};
+
+bindHoldBtn(
+  touchJump,
+  () => game.setTouchJump(true),
+  () => game.setTouchJump(false)
+);
+bindHoldBtn(
+  touchBoost,
+  () => game.setTouchBoost(true),
+  () => game.setTouchBoost(false)
+);
+touchDecoy.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  game.triggerTouchDecoy();
 });
