@@ -824,8 +824,8 @@ export class ChompLineGame {
       return;
     }
     if (this.playerY > 0.12) return;
-    this.playerVy = 10.2 + this.upgrades.levels.aurora_glider * 1.1;
-    this.airTrickActive = true;
+    this.playerVy = 11.4 + this.upgrades.levels.aurora_glider * 1.1;
+    this.airTrickActive = false; // Normal hop stays cleanly upright; hold Space or hit a mogul for upright 360° Heli!
     this.airSpinDegrees = 0;
     this.squashPos = 0.24;
     this.squashVel = 4.2;
@@ -1118,11 +1118,23 @@ export class ChompLineGame {
 
       if (this.playerY > 0 || this.playerVy > 0) {
         this.playerY += this.playerVy * dt;
-        const grav = isGliding ? 6.5 - gliderLvl * 1.1 : 23.5;
+        const grav = isGliding ? 6.5 - gliderLvl * 1.1 : 22.5;
         this.playerVy -= grav * dt;
 
-        if (spaceHeld && this.airTrickActive) {
-          this.airSpinDegrees += dt * (440 + gliderLvl * 85);
+        // Upright 360° Helicopter Spin around vertical Y-axis (NEVER upside-down!)
+        if (this.airTrickActive || (spaceHeld && this.playerY > 0.9)) {
+          this.airTrickActive = true;
+          const targetSpins = spaceHeld ? Math.ceil((this.airSpinDegrees + 1) / 360) : Math.max(1, Math.round(this.airSpinDegrees / 360));
+          const targetDeg = targetSpins * 360;
+          if (spaceHeld || this.airSpinDegrees < targetDeg) {
+            this.airSpinDegrees = Math.min(
+              spaceHeld ? 1440 : targetDeg,
+              this.airSpinDegrees + dt * (460 + gliderLvl * 80)
+            );
+          }
+          if (Math.random() < 0.35) {
+            this.spawnBurst(this.playerX, this.playerY + 0.2, this.playerZ, 1, 0x8ef5ff, 2.2, true);
+          }
         }
 
         if (this.playerY <= 0) {
@@ -1173,16 +1185,17 @@ export class ChompLineGame {
       this.facingDir = 1;
     }
 
-    // 3D banking yaw & roll + mid-air trick spin!
+    // 3D banking yaw & roll + UPRIGHT 360° helicopter spin around Y-axis (never upside down!)
     const speedNorm = Math.min(2.0, this.speed / 16.5);
     const groundBob =
       this.playerY <= 0.05 && !this.grindingRail
         ? Math.abs(Math.sin(this.elapsedTime * (10 + speedNorm * 3.5))) * 0.09
         : 0;
     this.skier.visual.position.y = groundBob;
-    this.skier.visual.rotation.y = this.smoothLean * 0.34;
-    this.skier.visual.rotation.z =
-      -this.smoothLean * 0.26 + (this.airSpinDegrees * Math.PI) / 180;
+    this.skier.visual.rotation.y =
+      this.smoothLean * 0.32 + (this.airSpinDegrees * Math.PI) / 180;
+    this.skier.visual.rotation.x = this.playerY > 0.15 ? -0.14 : 0;
+    this.skier.visual.rotation.z = -this.smoothLean * 0.22;
     if (this.crashStunTimer > 0) {
       this.skier.visual.rotation.z += Math.sin(this.elapsedTime * 34) * 0.42;
     }
@@ -1553,15 +1566,15 @@ export class ChompLineGame {
         continue;
       }
 
-      if (e.kind === 'mogul' && !e.triggered && dist < 2.25 && this.playerY < 0.7) {
+      if (e.kind === 'mogul' && !e.triggered && dist < 2.3 && this.playerY < 0.8) {
         e.triggered = true;
-        this.playerVy = 12.8 + this.upgrades.levels.aurora_glider * 1.4;
+        this.playerVy = 14.0 + this.upgrades.levels.aurora_glider * 1.4;
         this.airTrickActive = true;
         this.airSpinDegrees = 0;
         this.squashPos = 0.28;
         this.squashVel = 5.0;
         this.sound.playJump();
-        this.spawnBurst(e.x, 0.7, e.z, 14, 0x8ef5ff, 6.4, true);
+        this.spawnBurst(e.x, 0.7, e.z, 16, 0x8ef5ff, 6.6, true);
         continue;
       }
 
