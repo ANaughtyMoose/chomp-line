@@ -1,7 +1,7 @@
 export type UpgradeId =
   | 'pyro_carver'
   | 'aurora_glider'
-  | 'rail_striker'
+  | 'gate_striker'
   | 'avalanche_stomp'
   | 'decoy_snowman'
   | 'bauble_shield'
@@ -21,9 +21,9 @@ export const UPGRADE_CATALOG: UpgradeDef[] = [
     id: 'pyro_carver',
     name: 'Pyro Carver',
     icon: '🔥',
-    tag: 'FLAMING TRAIL',
+    tag: 'FLAMING SKIS',
     description:
-      'Sharp carves blaze with golden fire, igniting nearby pines into roaring Yule bonfires that scorch and banish the Yeti.',
+      'Grazing pine trees while carving ignites them into cozy Yule bonfires (+Flow & points) that scorch and stun the Yeti.',
     maxLevel: 3,
   },
   {
@@ -32,16 +32,16 @@ export const UPGRADE_CATALOG: UpgradeDef[] = [
     icon: '🪽',
     tag: 'AIRBORNE FLOW',
     description:
-      'Hold Space in mid-air to catch shimmering emerald thermal updrafts, soaring cleanly over forests and multiplying trick scores.',
+      'Hold Space in mid-air to unfurl emerald Aurora wings, soaring effortlessly over forests and multiplying trick scores.',
     maxLevel: 3,
   },
   {
-    id: 'rail_striker',
-    name: 'Fairy-Light Rail Striker',
+    id: 'gate_striker',
+    name: 'Fairy-Light Gate Striker',
     icon: '⚡',
-    tag: 'GRIND CHAIN',
+    tag: 'SLALOM ARC',
     description:
-      'Grinding festive wooden rails or clearing candy gates unleashes golden sparks that shatter obstacles ahead into bonus points.',
+      'Slicing through candy-cane slalom gates unleashes golden fairy-light arcs that shatter obstacles ahead into bonus points.',
     maxLevel: 3,
   },
   {
@@ -50,7 +50,7 @@ export const UPGRADE_CATALOG: UpgradeDef[] = [
     icon: '❄️',
     tag: 'TRICK SHOCKWAVE',
     description:
-      'Perfect-Stomp landings unleash a powder blast that obliterates nearby rocks & trees and knocks back a lunging Yeti.',
+      'Landing a 360°+ mogul spin unleashes a powder blast that clears nearby rocks & trees and knocks back a lunging Yeti.',
     maxLevel: 3,
   },
   {
@@ -59,7 +59,7 @@ export const UPGRADE_CATALOG: UpgradeDef[] = [
     icon: '⛄',
     tag: 'YETI BAIT [E]',
     description:
-      'Press E (or auto-deploy before a lunge) to toss a festive snowman that stops the Yeti cold for 3.5s. Stacks add +2 charges.',
+      'Press E (or auto-deploy before a bite) to drop a cheerful snowman that distracts the Yeti for 3.5s. Stacks add +2 charges.',
     maxLevel: 3,
   },
   {
@@ -68,16 +68,16 @@ export const UPGRADE_CATALOG: UpgradeDef[] = [
     icon: '🎄',
     tag: 'COMBO GUARD',
     description:
-      'Orbiting blown-glass ornaments shatter to absorb crashes while keeping your speed and combo multiplier intact.',
+      'Orbiting blown-glass ornaments shatter to absorb a tree or rock crash while keeping your speed and combo intact.',
     maxLevel: 3,
   },
   {
     id: 'cocoa_magnet',
-    name: 'Cocoa Slingshot',
+    name: 'Hot Cocoa Magnet',
     icon: '☕',
-    tag: 'CARVE TURBO',
+    tag: 'FLOW HARVEST',
     description:
-      'Carve-Slingshots charge 50% faster with bigger bursts, and steaming hot-cocoa pickups pull straight into your hands.',
+      'Pulls steaming hot-cocoa mugs toward you, widens slalom capture, and boosts Flow refill while carving.',
     maxLevel: 3,
   },
 ];
@@ -94,7 +94,7 @@ export function createInitialUpgrades(): UpgradeState {
     levels: {
       pyro_carver: 0,
       aurora_glider: 0,
-      rail_striker: 0,
+      gate_striker: 0,
       avalanche_stomp: 0,
       decoy_snowman: 0,
       bauble_shield: 0,

@@ -137,6 +137,23 @@ export class SoundEngine {
     this.chaseAudio.pause();
   }
 
+  public pauseMusic(): void {
+    this.cruiseAudio.pause();
+    this.chaseAudio.pause();
+  }
+
+  public resumeMusic(): void {
+    if (!this.musicActive || this.musicMuted) return;
+    const active = this.chaseMode ? this.chaseAudio : this.cruiseAudio;
+    active.playbackRate = this.targetRate;
+    active.play().catch(() => {});
+  }
+
+  public setMusicDucked(ducked: boolean): void {
+    this.cruiseAudio.volume = ducked ? 0.14 : 0.36;
+    this.chaseAudio.volume = ducked ? 0.16 : 0.42;
+  }
+
   private initAmbientSnowAudio(): void {
     if (!this.ctx || !this.sfxBus) return;
     const bufferSize = this.ctx.sampleRate * 2;

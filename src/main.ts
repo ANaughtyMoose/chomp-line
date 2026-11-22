@@ -11,6 +11,9 @@ const zoneDot = document.getElementById('zone-dot')!;
 const comboPill = document.getElementById('combo-pill')!;
 const flowFill = document.getElementById('flow-fill')!;
 const flowPct = document.getElementById('flow-pct')!;
+const chompLabel = document.getElementById('chomp-label')!;
+const chompDist = document.getElementById('chomp-dist')!;
+const chompFill = document.getElementById('chomp-fill')!;
 const gearBar = document.getElementById('gear-bar')!;
 
 const hudDist = document.getElementById('hud-dist')!;
@@ -86,6 +89,18 @@ const game = new ChompLineGame(canvas, {
     flowFill.style.width = `${data.flow}%`;
     flowFill.classList.toggle('boosting', data.boosting);
     flowPct.textContent = `${data.flow}%`;
+
+    const toChomp = Math.max(0, 2000 - data.distance);
+    const chompPct = Math.min(100, (data.distance / 2000) * 100);
+    chompFill.style.width = `${chompPct}%`;
+    chompFill.classList.toggle('active', toChomp === 0);
+    if (toChomp > 0) {
+      chompLabel.textContent = 'To 2,000m Chomp Line';
+      chompDist.textContent = `${toChomp.toLocaleString()} m`;
+    } else {
+      chompLabel.textContent = 'The Chomp Line';
+      chompDist.textContent = 'ACTIVE';
+    }
 
     zoneName.textContent = data.sectorName;
     zoneDot.style.background = data.sectorColor;

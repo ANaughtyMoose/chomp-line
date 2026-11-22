@@ -8,6 +8,7 @@ import { SoundEngine } from './audio';
 import { createAuroraBackdrop, DioramaPostShader } from './shaders';
 import { SnowTrailSurface } from './snowTrail';
 import {
+  createBestFlag,
   createCandyCaneGate,
   createCocoaPickup,
   createDecoySnowman,
@@ -19,8 +20,6 @@ import {
   createDioramaSkiLift,
   createDioramaYeti,
   createForegroundBokehFrame,
-  createGrindRail,
-  createIcePond,
   createLodgeArch,
   createMogulRamp,
   createSnowRock,
@@ -49,14 +48,13 @@ interface SlopeEntity {
     | 'rock'
     | 'mogul'
     | 'gate'
-    | 'rail'
-    | 'ice'
     | 'dog'
     | 'boarder'
     | 'cocoa'
     | 'lodge'
     | 'chalet'
-    | 'decoy';
+    | 'decoy'
+    | 'best_flag';
   mesh: THREE.Object3D;
   x: number;
   z: number;
@@ -64,9 +62,6 @@ interface SlopeEntity {
   vx?: number;
   vz?: number;
   gateWidth?: number;
-  railLength?: number;
-  iceRx?: number;
-  iceRz?: number;
   triggered?: boolean;
   nearMissed?: boolean;
   pineObj?: DioramaPine;
@@ -104,7 +99,6 @@ export interface HudCallbacks {
     bestDistance: number;
     flow: number;
     boosting: boolean;
-    carveCharge: number;
     comboMult: number;
     sectorName: string;
     sectorColor: string;
@@ -148,9 +142,14 @@ export class ChompLineGame {
   private liftChairs: { mesh: THREE.Group; t: number }[] = [];
   private snowfallPoints!: THREE.Points;
   private snowfallPositions!: Float32Array;
+
+  // Shared particle/snowball geometries & cached color materials (zero GPU memory leaks!)
   private burstParticles: BurstParticle[] = [];
+  private burstMatCache = new Map<number, THREE.MeshBasicMaterial>();
   private sharedSphereGeo = new THREE.SphereGeometry(0.16, 6, 6);
   private sharedSparkGeo = new THREE.OctahedronGeometry(0.2, 0);
+  private sharedSnowballGeo = new THREE.DodecahedronGeometry(0.75, 1);
+  private sharedSnowballMat = new THREE.MeshStandardMaterial({ color: 0xeaf5ff, roughness: 0.85 });
 
   private skier!: DioramaSkier;
   private yeti!: DioramaYeti;
@@ -164,7 +163,7 @@ export class ChompLineGame {
   private lastTime = 0;
   private elapsedTime = 0;
 
-  // Player Physics & State (Tuned to v1's golden flow-state feel!)
+  // Player Physics & Flow-State Tuning
   private playerX = 0;
   private playerZ = -3.8;
   private playerVx = 0;
@@ -174,33 +173,28 @@ export class ChompLineGame {
   private distance = 0;
   private score = 0;
   private bestDistance = 0;
+  private runStartBest = 0;
+  private bestFlagSpawned = false;
   private flow = 100;
   private flowSurgeTimer = 0;
 
-  // Modern Carve-Slingshot, Tricks, Rail Grind & Combo Multiplier
-  private carveCharge = 0; // 0..1
-  private lastCarveDir = 0;
   private comboMult = 1.0;
   private comboTimer = 0;
   private tricksAndOutplays = 0;
   private airSpinDegrees = 0;
   private airTrickActive = false;
-  private grindingRail: SlopeEntity | null = null;
-  private grindSparkAccum = 0;
-  private onIcePond = false;
   private crashStunTimer = 0;
   private invulnTimer = 0;
   private screenShake = 0;
 
-  // Expressive Spring-Physics Puppet Animation State
+  // Expressive Spring-Physics Puppet State
   private squashPos = 0;
   private squashVel = 0;
   private smoothLean = 0;
   private smoothCrouch = 0;
-  private smoothAir = 0;
-  private facingDir = 1; // 1 = left-facing sprite default, -1 = mirrored right-facing
+  private facingDir = 1;
 
-  // 2,000m Chomp Line Yeti State (Pure anticipation & payoff — no early ambush interruptions!)
+  // 2,000m Chomp Line Yeti State
   private yetiTriggered = false;
   private yetiActive = false;
   private yetiX = 0;
@@ -219,7 +213,7 @@ export class ChompLineGame {
   private upgrades: UpgradeState = createInitialUpgrades();
   private activeDraftChoices: UpgradeDef[] = [];
 
-  // Controls
+  // Controls (Seamless Mouse/Trackpad + Keyboard)
   private keys = new Set<string>();
   private mouseActive = false;
   private mouseNormX = 0;
@@ -237,7 +231,7 @@ export class ChompLineGame {
       const saved = window.localStorage.getItem(BEST_STORAGE_KEY);
       if (saved) this.bestDistance = Math.max(0, parseInt(saved, 10) || 0);
     } catch {
-      // ignore
+      // ignore storage errors
     }
 
     this.initAsync();
@@ -278,7 +272,6 @@ export class ChompLineGame {
     this.renderer.toneMappingExposure = 1.02;
 
     this.scene = new THREE.Scene();
-    // Soft luminous winter-lavender mist (keeps snow bright & powdery like the concept art!)
     this.scene.fog = new THREE.FogExp2(0x6c80ad, 0.0032);
 
     // Generous downhill sightline (~22m ahead) while preserving the snow-globe Aurora framing!
@@ -287,17 +280,17 @@ export class ChompLineGame {
     this.camera.lookAt(0, 3.0, -3.5);
     this.scene.add(this.camera);
 
-    // Lush out-of-focus foreground bokeh fairy-light pine framing attached to camera corners
+    // Out-of-focus foreground bokeh fairy-light pine framing attached to camera corners
     this.bokehFrame = createForegroundBokehFrame(this.tex);
     this.camera.add(this.bokehFrame);
 
-    // Post-processing: Cozy Golden Bloom + Macro Tilt-Shift Diorama Bokeh
+    // Post-processing: Cozy Holiday Bloom + Macro Tilt-Shift Diorama Bokeh
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
 
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.34, // crisp warm holiday glow without over-blowing aurora or snow
+      0.34,
       0.62,
       0.86
     );
@@ -307,7 +300,7 @@ export class ChompLineGame {
     this.dioramaPass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
     this.composer.addPass(this.dioramaPass);
 
-    // Luminous moonlit snow lighting so powder looks crisp icy-white and sapphire trenches POP!
+    // Luminous moonlit snow lighting
     const hemi = new THREE.HemisphereLight(0xf0f7ff, 0x7c97c4, 1.55);
     this.scene.add(hemi);
 
@@ -325,12 +318,11 @@ export class ChompLineGame {
     aurora.mesh.position.set(0, 17.5, -66);
     this.scene.add(aurora.mesh);
 
-    // Sculpted 3D Undulating Snowy Alpine Valley + Glossy Blue Ski Trenches Texture
+    // Sculpted 3D Undulating Snowy Alpine Valley + Subtle Carved Ski Tracks
     this.snowTrail = new SnowTrailSurface(this.WORLD_WIDTH, this.WORLD_LENGTH);
     const groundGeo = new THREE.PlaneGeometry(this.WORLD_WIDTH, this.WORLD_LENGTH, 64, 48);
     groundGeo.rotateX(-Math.PI / 2);
 
-    // Gently sculpt valley snowbanks along outer sides so terrain feels pillowy & 3D!
     const posAttr = groundGeo.attributes.position;
     for (let i = 0; i < posAttr.count; i++) {
       const x = posAttr.getX(i);
@@ -353,7 +345,6 @@ export class ChompLineGame {
     this.groundMesh = new THREE.Mesh(groundGeo, groundMat);
     this.scene.add(this.groundMesh);
 
-    // Overhead Vintage Garlanded Ski-Lift Cable & Handcrafted Cutout Chairs
     this.initSkiLift();
     this.initSnowfall();
 
@@ -364,7 +355,7 @@ export class ChompLineGame {
 
     this.yeti = createDioramaYeti(this.tex);
     this.yeti.root.position.set(5.5, 0, -14.5);
-    this.yeti.root.visible = true; // Featured prominently on the live title diorama!
+    this.yeti.root.visible = true;
     this.scene.add(this.yeti.root);
   }
 
@@ -449,6 +440,11 @@ export class ChompLineGame {
         return;
       }
 
+      if (code === 'KeyR' && (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'gameover')) {
+        this.startNewRun();
+        return;
+      }
+
       if (code === 'Space') {
         e.preventDefault();
         if (this.mode === 'gameover') {
@@ -501,6 +497,7 @@ export class ChompLineGame {
 
   public startNewRun(): void {
     this.sound.unlock();
+    this.sound.setMusicDucked(false);
     this.clearDynamicEntities();
     this.snowTrail.reset();
 
@@ -512,17 +509,15 @@ export class ChompLineGame {
     this.speed = 14.5;
     this.distance = 0;
     this.score = 0;
+    this.runStartBest = this.bestDistance;
+    this.bestFlagSpawned = false;
     this.flow = 100;
     this.flowSurgeTimer = 0;
-    this.carveCharge = 0;
-    this.lastCarveDir = 0;
     this.comboMult = 1.0;
     this.comboTimer = 0;
     this.tricksAndOutplays = 0;
     this.airSpinDegrees = 0;
     this.airTrickActive = false;
-    this.grindingRail = null;
-    this.onIcePond = false;
     this.crashStunTimer = 0;
     this.invulnTimer = 0;
     this.screenShake = 0;
@@ -530,7 +525,6 @@ export class ChompLineGame {
     this.squashVel = 0;
     this.smoothLean = 0;
     this.smoothCrouch = 0;
-    this.smoothAir = 0;
     this.facingDir = 1;
     this.skier.setPose('straight');
 
@@ -562,12 +556,14 @@ export class ChompLineGame {
   public pauseGame(): void {
     if (this.mode !== 'playing') return;
     this.sound.stopCarve();
+    this.sound.pauseMusic();
     this.setMode('paused');
   }
 
   public resumeGame(): void {
     if (this.mode !== 'paused') return;
     this.lastTime = performance.now();
+    this.sound.resumeMusic();
     this.setMode('playing');
   }
 
@@ -576,6 +572,7 @@ export class ChompLineGame {
     applyUpgrade(this.upgrades, id);
     const def = UPGRADE_CATALOG.find((u) => u.id === id);
     this.sound.playUpgradePick();
+    this.sound.setMusicDucked(false);
 
     this.skier.shieldRing.visible = this.upgrades.shields > 0;
     this.skier.pyroGlow.visible = this.upgrades.levels.pyro_carver > 0;
@@ -605,7 +602,6 @@ export class ChompLineGame {
     for (let z = -54; z <= 30; z += 7.0) {
       this.spawnSideDecorAt(z);
     }
-    // Crisp, rhythmic, uncluttered starting slope!
     this.spawnGate(0, 12);
     this.spawnPine(10.5, 11);
     this.spawnPine(-10.5, 15);
@@ -640,13 +636,12 @@ export class ChompLineGame {
           mesh: pine.root,
           x: xBase,
           z,
-          radius: 1.1,
+          radius: 1.0,
           pineObj: pine,
           sideDecor: true,
         });
       }
 
-      // Second lush layer of village pines behind the first
       const farX = side * (this.PLAY_HALF_WIDTH + 9.5 + Math.random() * 7.5);
       const farPine = createDioramaPine(this.tex, 1.05 + Math.random() * 0.55);
       farPine.root.position.set(farX, 0.8, z + (Math.random() - 0.5) * 3.5);
@@ -657,7 +652,7 @@ export class ChompLineGame {
         mesh: farPine.root,
         x: farX,
         z: farPine.root.position.z,
-        radius: 1.2,
+        radius: 1.1,
         pineObj: farPine,
         sideDecor: true,
       });
@@ -675,7 +670,7 @@ export class ChompLineGame {
       mesh: pine.root,
       x,
       z,
-      radius: 1.15 * scale,
+      radius: 0.92 * scale, // Fair trunk-matched hitbox!
       pineObj: pine,
     });
   }
@@ -685,14 +680,14 @@ export class ChompLineGame {
     mesh.position.set(x, 0, z);
     mesh.rotation.y = Math.random() * Math.PI * 2;
     this.scene.add(mesh);
-    this.entities.push({ id: this.nextEntityId++, kind: 'rock', mesh, x, z, radius: 1.0 });
+    this.entities.push({ id: this.nextEntityId++, kind: 'rock', mesh, x, z, radius: 0.85 });
   }
 
   private spawnMogul(x: number, z: number): void {
     const mesh = createMogulRamp(this.tex);
     mesh.position.set(x, 0, z);
     this.scene.add(mesh);
-    this.entities.push({ id: this.nextEntityId++, kind: 'mogul', mesh, x, z, radius: 2.1 });
+    this.entities.push({ id: this.nextEntityId++, kind: 'mogul', mesh, x, z, radius: 2.2 });
   }
 
   private spawnGate(x: number, z: number): void {
@@ -711,40 +706,6 @@ export class ChompLineGame {
     });
   }
 
-  private spawnRail(x: number, z: number): void {
-    const railLength = 11.5;
-    const mesh = createGrindRail(this.tex, railLength);
-    mesh.position.set(x, 0, z);
-    this.scene.add(mesh);
-    this.entities.push({
-      id: this.nextEntityId++,
-      kind: 'rail',
-      mesh,
-      x,
-      z,
-      radius: 1.25,
-      railLength,
-    });
-  }
-
-  private spawnIcePond(x: number, z: number): void {
-    const rx = 4.8 + Math.random() * 1.8;
-    const rz = 6.5 + Math.random() * 2.5;
-    const mesh = createIcePond(this.tex, rx, rz);
-    mesh.position.set(x, 0, z);
-    this.scene.add(mesh);
-    this.entities.push({
-      id: this.nextEntityId++,
-      kind: 'ice',
-      mesh,
-      x,
-      z,
-      radius: rx,
-      iceRx: rx,
-      iceRz: rz,
-    });
-  }
-
   private spawnDog(x: number, z: number): void {
     const { root, card } = createDioramaDog(this.tex);
     const dir = x < 0 ? 1 : -1;
@@ -758,7 +719,7 @@ export class ChompLineGame {
       card,
       x,
       z,
-      radius: 0.9,
+      radius: 0.72,
       vx: dir * (2.6 + Math.random() * 1.4),
     });
   }
@@ -776,7 +737,7 @@ export class ChompLineGame {
       card,
       x,
       z,
-      radius: 1.0,
+      radius: 0.8,
       vx,
       vz: 4.2,
     });
@@ -792,7 +753,7 @@ export class ChompLineGame {
       mesh,
       x,
       z,
-      radius: 1.3,
+      radius: 1.35,
       bobPhase: Math.random() * Math.PI * 2,
     });
   }
@@ -804,28 +765,22 @@ export class ChompLineGame {
     this.entities.push({ id: this.nextEntityId++, kind: 'lodge', mesh, x: 0, z, radius: 1.0 });
   }
 
+  private spawnBestFlag(z: number): void {
+    const mesh = createBestFlag(this.tex);
+    mesh.position.set(0, 0, z);
+    this.scene.add(mesh);
+    this.entities.push({ id: this.nextEntityId++, kind: 'best_flag', mesh, x: 0, z, radius: 1.0 });
+  }
+
   private bumpCombo(amount = 0.5): void {
     this.comboMult = Math.min(5.0, Math.round((this.comboMult + amount) * 10) / 10);
     this.comboTimer = 5.5;
   }
 
   private tryJump(): void {
-    if (this.crashStunTimer > 0) return;
-    if (this.grindingRail) {
-      // Pop high off a grind rail!
-      this.grindingRail = null;
-      this.playerVy = 11.2;
-      this.airTrickActive = true;
-      this.airSpinDegrees = 0;
-      this.squashPos = 0.22;
-      this.squashVel = 3.8;
-      this.sound.playJump();
-      this.spawnBurst(this.playerX, 1.2, this.playerZ, 12, 0xffd770, 6.2, true);
-      return;
-    }
-    if (this.playerY > 0.12) return;
+    if (this.crashStunTimer > 0 || this.playerY > 0.12) return;
     this.playerVy = 11.4 + this.upgrades.levels.aurora_glider * 1.1;
-    this.airTrickActive = false; // Normal hop stays cleanly upright; hold Space or hit a mogul for upright 360° Heli!
+    this.airTrickActive = false;
     this.airSpinDegrees = 0;
     this.squashPos = 0.24;
     this.squashVel = 4.2;
@@ -863,7 +818,6 @@ export class ChompLineGame {
   private igniteTree(e: SlopeEntity): void {
     if (!e.pineObj || e.pineObj.ignited) return;
     e.pineObj.ignited = true;
-    // Organic glowing particle bonfire directly on the real Christmas tree (no fake clipart sticker!)
     e.pineObj.emberHalo.visible = true;
     e.pineObj.warmGlow.scale.setScalar(2.1);
 
@@ -877,8 +831,8 @@ export class ChompLineGame {
     this.callbacks.onToast(`🔥 Pyro Skis Ignited Pine! +${pts}`, 'fire');
   }
 
-  private triggerRailLightning(): void {
-    const strikes = 1 + this.upgrades.levels.rail_striker;
+  private triggerGateLightning(): void {
+    const strikes = 1 + this.upgrades.levels.gate_striker;
     let count = 0;
     for (let i = this.entities.length - 1; i >= 0 && count < strikes; i--) {
       const e = this.entities[i];
@@ -897,6 +851,15 @@ export class ChompLineGame {
     }
   }
 
+  private getBurstMaterial(colorHex: number): THREE.MeshBasicMaterial {
+    let mat = this.burstMatCache.get(colorHex);
+    if (!mat) {
+      mat = new THREE.MeshBasicMaterial({ color: colorHex });
+      this.burstMatCache.set(colorHex, mat);
+    }
+    return mat;
+  }
+
   private spawnBurst(
     x: number,
     y: number,
@@ -906,7 +869,7 @@ export class ChompLineGame {
     speed = 6.0,
     isSpark = false
   ): void {
-    const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+    const mat = this.getBurstMaterial(colorHex);
     for (let i = 0; i < count; i++) {
       if (this.burstParticles.length > 240) break;
       const mesh = new THREE.Mesh(isSpark ? this.sharedSparkGeo : this.sharedSphereGeo, mat);
@@ -960,7 +923,6 @@ export class ChompLineGame {
     this.playerX += this.playerVx * dt;
     this.skier.root.position.set(this.playerX, 0, this.playerZ);
 
-    // Live expressive skier puppet on the title diorama (zero face warp!)
     if (Math.abs(this.playerVx) > 2.2) {
       this.skier.setPose('carve');
       this.facingDir = this.playerVx > 0 ? -1 : 1;
@@ -976,7 +938,6 @@ export class ChompLineGame {
     this.skier.uniforms.uCrouch.value = 0.0;
     this.skier.uniforms.uFlipX.value = this.facingDir;
 
-    // Showcase the articulated Christmas-light Yeti stomping behind on the scenic title diorama!
     this.yeti.root.visible = true;
     const yStep = this.elapsedTime * 6.5;
     this.yeti.root.position.set(
@@ -1044,14 +1005,10 @@ export class ChompLineGame {
       if (this.comboTimer <= 0) this.comboMult = 1.0;
     }
 
-    // 2. Smooth Carving Charges Your Flow Tank (No surprise speed surges pushing you into trees!)
-    const carvingHard = this.playerY <= 0.08 && !this.grindingRail && Math.abs(steerInput) > 0.52;
+    const carvingHard = this.playerY <= 0.08 && Math.abs(steerInput) > 0.52;
     const magnetLvl = this.upgrades.levels.cocoa_magnet;
-    this.carveCharge = 0;
 
-    // 3. Golden Flow-State Speed Curve:
-    //    Starts relaxed & buttery (14.5 m/s), steadily accelerates to ~22.5 m/s by 2,000m,
-    //    and YOU control bursts with F / Shift / Click (+10.5 m/s)!
+    // 2. Golden Flow-State Speed Curve (14.5 -> 23 m/s cruise, +10.5 m/s on Boost)
     const isBoosting =
       this.crashStunTimer <= 0 && ((boostHeld && this.flow > 1.5) || this.flowSurgeTimer > 0);
     const distAccel = Math.min(8.5, this.distance / 250);
@@ -1066,7 +1023,6 @@ export class ChompLineGame {
         this.flow = Math.max(0, this.flow - 20.0 * dt);
       }
     } else {
-      // Carving cleanly refills your Flow Boost meter!
       const carveRefill = carvingHard ? 7.5 + magnetLvl * 2.5 : 0;
       this.flow = Math.min(100, this.flow + (5.0 + carveRefill) * dt);
     }
@@ -1077,99 +1033,71 @@ export class ChompLineGame {
     }
 
     this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 6.5);
-    // Sync real Christmas music tempo gently to your skiing speed!
     this.sound.setTempoFromSpeed(this.speed);
 
     const dz = this.speed * dt;
     this.distance += dz;
     this.score += dz * this.comboMult * (isBoosting ? 1.65 : 1.0);
 
-    // Crisp, effortless, predictable lateral carving
-    const latResponsiveness = 13.5;
+    // 3. Crisp Lateral Carving & Upright Jump/Spin Physics
     const maxLatSpeed = (isBoosting ? 18.5 : 15.5) * (this.crashStunTimer > 0 ? 0.38 : 1.0);
+    const targetVx = steerInput * maxLatSpeed;
+    this.playerVx += (targetVx - this.playerVx) * Math.min(1, dt * 13.5);
+    this.playerX += this.playerVx * dt;
+    this.playerX = Math.max(-this.PLAY_HALF_WIDTH, Math.min(this.PLAY_HALF_WIDTH, this.playerX));
 
-    if (this.grindingRail) {
-      // Lock cleanly along the festive wooden rail!
-      this.playerX += (this.grindingRail.x - this.playerX) * Math.min(1, dt * 14);
-      this.playerY = 1.18;
-      this.playerVy = 0;
-      this.flow = Math.min(100, this.flow + 24 * dt);
-      this.score += 180 * this.comboMult * dt;
-      this.grindSparkAccum += dt;
-      if (this.grindSparkAccum > 0.055) {
-        this.grindSparkAccum = 0;
-        this.spawnBurst(this.playerX, 1.15, this.playerZ - 0.3, 3, 0xffd770, 5.2, true);
-      }
-      const halfL = (this.grindingRail.railLength || 11.5) * 0.5;
-      if (this.playerZ < this.grindingRail.z - halfL || this.playerZ > this.grindingRail.z + halfL + 1.0) {
-        this.grindingRail = null;
-        this.playerVy = 6.8;
-      }
-    } else {
-      const targetVx = steerInput * maxLatSpeed;
-      this.playerVx += (targetVx - this.playerVx) * Math.min(1, dt * latResponsiveness);
-      this.playerX += this.playerVx * dt;
-      this.playerX = Math.max(-this.PLAY_HALF_WIDTH, Math.min(this.PLAY_HALF_WIDTH, this.playerX));
+    const gliderLvl = this.upgrades.levels.aurora_glider;
+    const isGliding = gliderLvl > 0 && this.playerY > 0.8 && this.playerVy < 0 && spaceHeld;
+    this.skier.gliderWings.visible = isGliding;
 
-      // Vertical Jump, Hold-to-Spin Tricks, Aurora Glider & Perfect Stomp!
-      const gliderLvl = this.upgrades.levels.aurora_glider;
-      const isGliding = gliderLvl > 0 && this.playerY > 0.8 && this.playerVy < 0 && spaceHeld;
-      this.skier.gliderWings.visible = isGliding;
+    if (this.playerY > 0 || this.playerVy > 0) {
+      this.playerY += this.playerVy * dt;
+      const grav = isGliding ? 6.5 - gliderLvl * 1.1 : 22.5;
+      this.playerVy -= grav * dt;
 
-      if (this.playerY > 0 || this.playerVy > 0) {
-        this.playerY += this.playerVy * dt;
-        const grav = isGliding ? 6.5 - gliderLvl * 1.1 : 22.5;
-        this.playerVy -= grav * dt;
-
-        // Upright 360° Helicopter Spin around vertical Y-axis (NEVER upside-down!)
-        if (this.airTrickActive || (spaceHeld && this.playerY > 0.9)) {
-          this.airTrickActive = true;
-          const targetSpins = spaceHeld ? Math.ceil((this.airSpinDegrees + 1) / 360) : Math.max(1, Math.round(this.airSpinDegrees / 360));
-          const targetDeg = targetSpins * 360;
-          if (spaceHeld || this.airSpinDegrees < targetDeg) {
-            this.airSpinDegrees = Math.min(
-              spaceHeld ? 1440 : targetDeg,
-              this.airSpinDegrees + dt * (460 + gliderLvl * 80)
-            );
-          }
-          if (Math.random() < 0.35) {
-            this.spawnBurst(this.playerX, this.playerY + 0.2, this.playerZ, 1, 0x8ef5ff, 2.2, true);
-          }
+      // Upright 360° Helicopter Spin around vertical Y-axis (NEVER upside down!)
+      if (this.airTrickActive || (spaceHeld && this.playerY > 0.9)) {
+        this.airTrickActive = true;
+        const targetSpins = spaceHeld
+          ? Math.ceil((this.airSpinDegrees + 1) / 360)
+          : Math.max(1, Math.round(this.airSpinDegrees / 360));
+        const targetDeg = targetSpins * 360;
+        if (spaceHeld || this.airSpinDegrees < targetDeg) {
+          this.airSpinDegrees = Math.min(
+            spaceHeld ? 1440 : targetDeg,
+            this.airSpinDegrees + dt * (460 + gliderLvl * 80)
+          );
         }
-
-        if (this.playerY <= 0) {
-          this.playerY = 0;
-          this.playerVy = 0;
-          this.skier.gliderWings.visible = false;
-          this.handleTrickLanding(spaceHeld);
+        if (Math.random() < 0.35) {
+          this.spawnBurst(this.playerX, this.playerY + 0.2, this.playerZ, 1, 0x8ef5ff, 2.2, true);
         }
+      }
+
+      if (this.playerY <= 0) {
+        this.playerY = 0;
+        this.playerVy = 0;
+        this.skier.gliderWings.visible = false;
+        this.handleTrickLanding(spaceHeld);
       }
     }
 
-    // Keep generous downhill reaction space even during Yeti chase!
     const desiredZ = this.yetiActive ? -2.2 : -3.8;
     this.playerZ += (desiredZ - this.playerZ) * Math.min(1, dt * 2.5);
 
-    // Update Articulated HD-2D Stop-Motion Skier Puppet (4 Poses + Spring Squash/Stretch + Scarf Wind + 3D Banking!)
+    // 4. Update Expressive Skier Puppet
     this.skier.root.position.set(this.playerX, this.playerY, this.playerZ);
     this.skier.shadow.position.y = 0.04 - this.playerY;
-    const shadowScale = Math.max(0.4, 1 - this.playerY * 0.09);
-    this.skier.shadow.scale.setScalar(shadowScale);
+    this.skier.shadow.scale.setScalar(Math.max(0.4, 1 - this.playerY * 0.09));
 
-    // Damped spring oscillator for juicy squash & stretch!
     const springForce = -195 * this.squashPos - 14 * this.squashVel;
     this.squashVel += springForce * dt;
     this.squashPos = Math.max(-0.32, Math.min(0.32, this.squashPos + this.squashVel * dt));
 
-    // Smoothly interpolate puppet deformation channels
     const targetLean = Math.max(-1, Math.min(1, this.playerVx / 13.5));
     this.smoothLean += (targetLean - this.smoothLean) * Math.min(1, dt * 13);
-    const targetCrouch = isBoosting ? 1.0 : tuckKey ? 0.55 : this.grindingRail ? 0.45 : 0.0;
+    const targetCrouch = isBoosting ? 1.0 : tuckKey ? 0.55 : 0.0;
     this.smoothCrouch += (targetCrouch - this.smoothCrouch) * Math.min(1, dt * 10);
-    const targetAir = this.playerY > 0.25 ? 1.0 : 0.0;
-    this.smoothAir += (targetAir - this.smoothAir) * Math.min(1, dt * 12);
 
-    // Select stop-motion pose dynamically based on action!
     const absVx = Math.abs(this.playerVx);
     if (isBoosting && absVx < 9.5 && this.playerY < 0.2) {
       this.skier.setPose('boost');
@@ -1185,22 +1113,17 @@ export class ChompLineGame {
       this.facingDir = 1;
     }
 
-    // 3D banking yaw & roll + UPRIGHT 360° helicopter spin around Y-axis (never upside down!)
     const speedNorm = Math.min(2.0, this.speed / 16.5);
     const groundBob =
-      this.playerY <= 0.05 && !this.grindingRail
-        ? Math.abs(Math.sin(this.elapsedTime * (10 + speedNorm * 3.5))) * 0.09
-        : 0;
+      this.playerY <= 0.05 ? Math.abs(Math.sin(this.elapsedTime * (10 + speedNorm * 3.5))) * 0.09 : 0;
     this.skier.visual.position.y = groundBob;
-    this.skier.visual.rotation.y =
-      this.smoothLean * 0.32 + (this.airSpinDegrees * Math.PI) / 180;
+    this.skier.visual.rotation.y = this.smoothLean * 0.32 + (this.airSpinDegrees * Math.PI) / 180;
     this.skier.visual.rotation.x = this.playerY > 0.15 ? -0.14 : 0;
     this.skier.visual.rotation.z = -this.smoothLean * 0.22;
     if (this.crashStunTimer > 0) {
       this.skier.visual.rotation.z += Math.sin(this.elapsedTime * 34) * 0.42;
     }
 
-    // Feed clean puppet uniforms (ZERO face warping — only scarf tip flutter + whole-body squash/stretch!)
     const u = this.skier.uniforms;
     u.uTime.value = this.elapsedTime;
     u.uSpeed.value = speedNorm;
@@ -1212,16 +1135,15 @@ export class ChompLineGame {
       this.skier.shieldRing.rotation.y += dt * 3.4;
     }
 
-    // Audio snow carving + wind
     this.sound.updateCarve(
       Math.min(1, (this.speed - 10) / 22),
       Math.abs(this.playerVx) / 16,
-      this.playerY > 0.1 || this.grindingRail !== null
+      this.playerY > 0.1
     );
 
-    // 4. Glossy Carved Snow Tracks & Continuous Rooster-Tail Carving Powder Spray!
+    // 5. Subtle Snow-Pressed Ski Tracks & Carving Powder Spray
     this.snowTrail.advance(dz);
-    if (this.playerY <= 0.08 && !this.grindingRail) {
+    if (this.playerY <= 0.08) {
       const pyroOn = this.upgrades.levels.pyro_carver > 0 && (carvingHard || isBoosting);
       this.snowTrail.stampSkiTracks(
         this.playerX,
@@ -1247,11 +1169,11 @@ export class ChompLineGame {
       }
     }
 
-    // 5. Escalating Yeti Encounters & Aurora Intensity!
+    // 6. Aurora Intensity & 2,000m Chomp Line Yeti Trigger
     this.auroraUniforms.uIntensity.value = Math.min(1.0, 0.72 + (this.distance / 2200) * 0.28);
-    this.checkYetiPhaseTriggers();
+    this.checkYetiTrigger();
 
-    // 6. Spawners, Entities, Yeti & Particles
+    // 7. Spawners, Entities, Yeti & Particles
     this.updateSpawners(dz);
     this.updateEntities(dt, dz);
     if (this.yetiActive) {
@@ -1261,13 +1183,12 @@ export class ChompLineGame {
     this.updateAmbientAtmosphere(dt, dz);
     this.updateBurstParticles(dt, dz);
 
-    // 7. Intimate Snow-Globe Camera Follow + Subtle Bokeh Frame Sway
+    // 8. Camera Follow, FOV Acceleration Punch & Bokeh Sway
     if (this.screenShake > 0) this.screenShake = Math.max(0, this.screenShake - dt * 2.8);
     const sx = (Math.random() - 0.5) * this.screenShake * 1.1;
     const sy = (Math.random() - 0.5) * this.screenShake * 0.8;
     const boostZoom = isBoosting ? 1.6 : 0;
 
-    // Subtle FOV acceleration punch as speed builds (46 -> 52 deg)
     const targetFov = 46 + Math.min(5.5, Math.max(0, (this.speed - 14.5) * 0.28)) + (isBoosting ? 2.0 : 0);
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 4.5);
     this.camera.updateProjectionMatrix();
@@ -1277,7 +1198,6 @@ export class ChompLineGame {
     this.camera.position.z += (34.5 + boostZoom - this.camera.position.z) * Math.min(1, dt * 4.5);
     this.camera.lookAt(this.playerX * 0.3, 3.0, -3.5);
 
-    // Gently sway the foreground bokeh corner pine framing for tactile snow-globe depth
     this.bokehFrame.position.x = -this.playerVx * 0.035;
     this.bokehFrame.position.y = Math.sin(this.elapsedTime * 1.4) * 0.12;
 
@@ -1290,36 +1210,7 @@ export class ChompLineGame {
     this.emitHud(isBoosting);
   }
 
-  private releaseCarveSlingshot(): void {
-    const power = this.carveCharge;
-    this.carveCharge = 0;
-    const magnetLvl = this.upgrades.levels.cocoa_magnet;
-    this.flowSurgeTimer = Math.max(this.flowSurgeTimer, 0.75 + power * 0.65 + magnetLvl * 0.25);
-    this.flow = Math.min(100, this.flow + 14 + power * 10);
-    this.squashPos = 0.2;
-    this.squashVel = 3.2;
-    this.bumpCombo(0.4);
-    const pts = Math.round((120 + power * 120) * this.comboMult);
-    this.score += pts;
-    this.sound.playSlingshot();
-    this.spawnBurst(this.playerX, 0.5, this.playerZ, 14, 0x7df9ff, 6.8, true);
-    this.callbacks.onToast(`⚡ Carve Slingshot! +${pts}`, 'good');
-
-    // Pyro Carver synergy: snapping a slingshot ignites nearby pine trees into bonfires!
-    if (this.upgrades.levels.pyro_carver > 0) {
-      const fireRad = 6.5 + this.upgrades.levels.pyro_carver * 2.2;
-      for (const e of this.entities) {
-        if (e.kind === 'tree' && !e.sideDecor && !e.pineObj?.ignited) {
-          if (Math.hypot(e.x - this.playerX, e.z - this.playerZ) < fireRad) {
-            this.igniteTree(e);
-          }
-        }
-      }
-    }
-  }
-
   private handleTrickLanding(spaceStillHeld: boolean): void {
-    // Juicy landing compression squash even on normal hops!
     this.squashPos = -0.24;
     this.squashVel = -1.8;
 
@@ -1328,7 +1219,6 @@ export class ChompLineGame {
     this.airTrickActive = false;
     if (spins <= 0) return;
 
-    // Releasing Space before touchdown (or modest spin) nails a PERFECT STOMP!
     const perfect = !spaceStillHeld || spins === 1;
     const basePts = spins * 220;
     const pts = Math.round(basePts * this.comboMult * (perfect ? 1.5 : 1.0));
@@ -1338,11 +1228,11 @@ export class ChompLineGame {
     this.bumpCombo(perfect ? 0.6 : 0.3);
 
     if (perfect) {
-      this.flowSurgeTimer = Math.max(this.flowSurgeTimer, 0.9);
+      this.flowSurgeTimer = Math.max(this.flowSurgeTimer, 0.85);
       this.sound.playPerfectStomp();
-      this.screenShake = Math.max(this.screenShake, 0.35);
+      this.screenShake = Math.max(this.screenShake, 0.32);
       this.spawnBurst(this.playerX, 0.4, this.playerZ, 20, 0x62f5ff, 8.2, true);
-      this.callbacks.onToast(`✨ Perfect ${spins * 360}° Stomp! +${pts}`, 'good');
+      this.callbacks.onToast(`✨ ${spins * 360}° Helicopter Stomp! +${pts}`, 'good');
 
       if (this.upgrades.levels.avalanche_stomp > 0) {
         this.triggerAvalancheShockwave();
@@ -1375,8 +1265,7 @@ export class ChompLineGame {
     }
   }
 
-  private checkYetiPhaseTriggers(): void {
-    // Save the Yeti's iconic grand entrance for 2,000 meters — pure anticipation & payoff!
+  private checkYetiTrigger(): void {
     if (!this.yetiTriggered && this.distance >= 2000) {
       this.yetiTriggered = true;
       this.yetiActive = true;
@@ -1388,7 +1277,7 @@ export class ChompLineGame {
       this.screenShake = 0.85;
       this.flow = Math.min(100, this.flow + 50);
       this.sound.playYetiRoar();
-      this.sound.setChaseMode(true); // Kicks into fast manic Jingle Bells!
+      this.sound.setChaseMode(true);
       this.callbacks.onMilestone(
         '2,000 METERS',
         'THE CHOMP LINE',
@@ -1404,12 +1293,17 @@ export class ChompLineGame {
       this.spawnSideDecorAt(30);
     }
 
+    // Personal-Best Record Flag planted right at your old record!
+    if (!this.bestFlagSpawned && this.runStartBest >= 150 && this.distance >= this.runStartBest - 30) {
+      this.bestFlagSpawned = true;
+      this.spawnBestFlag(30);
+    }
+
     if (this.distance >= this.nextLodgeDist - 30) {
       this.spawnLodgeArch(30);
       this.nextLodgeDist += this.nextLodgeDist < 1950 ? 650 : 850;
     }
 
-    // Crisp, rhythmic, uncluttered arcade slope!
     const densityMeters = Math.max(5.4, 8.8 - this.distance / 900);
     this.spawnAccum += dz;
     if (this.spawnAccum >= densityMeters) {
@@ -1425,7 +1319,6 @@ export class ChompLineGame {
           if (Math.abs(x2) < this.PLAY_HALF_WIDTH) this.spawnPine(x2, z + 2.4);
         }
       } else if (roll < 0.67) {
-        // Frequent Candy-Cane Slalom Gates with bright yellow ribbon!
         this.spawnGate((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.2), z);
       } else if (roll < 0.79) {
         this.spawnMogul((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.4), z);
@@ -1446,7 +1339,6 @@ export class ChompLineGame {
     const magnetLvl = this.upgrades.levels.cocoa_magnet;
     const pyroLvl = this.upgrades.levels.pyro_carver;
     const steppedTime = Math.floor(this.elapsedTime * 14) / 14;
-    this.onIcePond = false;
 
     for (let i = this.entities.length - 1; i >= 0; i--) {
       const e = this.entities[i];
@@ -1467,7 +1359,7 @@ export class ChompLineGame {
       } else if (e.kind === 'cocoa') {
         e.mesh.rotation.y += dt * 2.2;
         e.mesh.position.y = Math.sin(this.elapsedTime * 4 + (e.bobPhase || 0)) * 0.24;
-        const pullRad = 4.6 + magnetLvl * 4.2;
+        const pullRad = 4.8 + magnetLvl * 4.2;
         const dx = this.playerX - e.x;
         const ddz = this.playerZ - e.z;
         const d = Math.hypot(dx, ddz);
@@ -1476,7 +1368,6 @@ export class ChompLineGame {
           e.z += (ddz / d) * (13 + magnetLvl * 5) * dt;
         }
       } else if (e.kind === 'tree' && e.pineObj?.ignited) {
-        // Organic flickering bonfire glow + rising real flame/spark particles!
         const flick = 0.88 + Math.sin(this.elapsedTime * 22 + e.id) * 0.16;
         e.pineObj.emberHalo.scale.set(flick, 0.92 + Math.cos(this.elapsedTime * 19 + e.id) * 0.15, 1);
         if (Math.random() < 0.48) {
@@ -1489,7 +1380,6 @@ export class ChompLineGame {
       e.mesh.position.z = e.z;
 
       if (e.z < -58) {
-        if (this.grindingRail === e) this.grindingRail = null;
         this.scene.remove(e.mesh);
         this.entities.splice(i, 1);
         continue;
@@ -1501,33 +1391,11 @@ export class ChompLineGame {
       const ddz = this.playerZ - e.z;
       const dist = Math.hypot(dx, ddz);
 
-      // Frozen Ice Pond detection!
-      if (e.kind === 'ice' && this.playerY < 0.2) {
-        const rx = e.iceRx || 5;
-        const rz = e.iceRz || 7;
-        if ((dx * dx) / (rx * rx) + (ddz * ddz) / (rz * rz) <= 1.0) {
-          this.onIcePond = true;
-          if (!e.triggered) {
-            e.triggered = true;
-            this.flow = Math.min(100, this.flow + 12);
-            this.callbacks.onToast('🧊 Ice Drift — 2× Carve Charge!', 'good');
-          }
-        }
-        continue;
-      }
-
-      if (e.kind === 'rail' && !this.grindingRail) {
-        const halfL = (e.railLength || 11.5) * 0.5;
-        const nearEntry = Math.abs(ddz - halfL) < 2.2 && this.playerY < 1.2;
-        const landingOn = Math.abs(ddz) < halfL && this.playerY > 0.2 && this.playerY < 2.8 && this.playerVy <= 2.5;
-        if (Math.abs(dx) < 1.6 && (nearEntry || landingOn)) {
-          this.grindingRail = e;
-          this.airTrickActive = false;
-          this.airSpinDegrees = 0;
-          this.squashPos = -0.16;
-          this.squashVel = -1.2;
-          this.callbacks.onToast('⚡ Festive Rail Grind!', 'fire');
-        }
+      if (e.kind === 'best_flag' && !e.triggered && e.z <= this.playerZ) {
+        e.triggered = true;
+        this.sound.playUpgradePick();
+        this.spawnBurst(this.playerX, 1.6, this.playerZ, 24, 0xffd766, 8.2, true);
+        this.callbacks.onToast('🏆 NEW PERSONAL BEST!', 'fire');
         continue;
       }
 
@@ -1549,7 +1417,7 @@ export class ChompLineGame {
           this.sound.playGateChime(Math.floor(this.comboMult * 2));
           this.spawnBurst(this.playerX, 1.3, this.playerZ, 12, 0xffd770, 6.2, true);
           this.callbacks.onToast(`🍬 Candy Slalom! +${pts}`, 'good');
-          if (this.upgrades.levels.rail_striker > 0) this.triggerRailLightning();
+          if (this.upgrades.levels.gate_striker > 0) this.triggerGateLightning();
         }
         continue;
       }
@@ -1566,7 +1434,7 @@ export class ChompLineGame {
         continue;
       }
 
-      if (e.kind === 'mogul' && !e.triggered && dist < 2.3 && this.playerY < 0.8) {
+      if (e.kind === 'mogul' && !e.triggered && dist < 2.35 && this.playerY < 0.8) {
         e.triggered = true;
         this.playerVy = 14.0 + this.upgrades.levels.aurora_glider * 1.4;
         this.airTrickActive = true;
@@ -1594,12 +1462,12 @@ export class ChompLineGame {
         }
       }
 
-      // Near-miss & Pyro Carver ignition
+      // Generous Near-Miss & Pyro Carver Ignition
       if (
         (e.kind === 'tree' || e.kind === 'boarder' || e.kind === 'rock') &&
         !e.nearMissed &&
         dist < e.radius + 2.4 &&
-        dist > e.radius + 0.65 &&
+        dist > e.radius + 0.55 &&
         this.playerY < 1.2
       ) {
         e.nearMissed = true;
@@ -1614,12 +1482,11 @@ export class ChompLineGame {
         }
       }
 
-      // Solid Collision
+      // Fair, Base-Matched Solid Obstacle Collision
       if (
         (e.kind === 'tree' || e.kind === 'rock' || e.kind === 'dog' || e.kind === 'boarder') &&
-        dist < e.radius + 0.55 &&
-        this.playerY < 1.45 &&
-        !this.grindingRail &&
+        dist < e.radius + 0.48 &&
+        this.playerY < 1.35 &&
         this.invulnTimer <= 0
       ) {
         this.handlePlayerCrash(e);
@@ -1643,8 +1510,7 @@ export class ChompLineGame {
     this.crashStunTimer = 0.62;
     this.invulnTimer = 1.2;
     this.comboMult = 1.0;
-    this.carveCharge = 0;
-    this.speed = Math.max(6.2, this.speed * 0.42);
+    this.speed = Math.max(5.5, this.speed * 0.42);
     this.screenShake = 0.8;
     this.sound.playCrash();
     this.spawnBurst(this.playerX, 0.9, this.playerZ, 18, 0xffffff, 7.5);
@@ -1655,6 +1521,7 @@ export class ChompLineGame {
 
   private openUpgradeDraft(): void {
     this.sound.stopCarve();
+    this.sound.setMusicDucked(true);
     this.activeDraftChoices = draftThreeUpgrades(this.upgrades);
     this.setMode('upgrading');
     this.callbacks.onShowUpgradeDraft(Math.floor(this.distance), this.activeDraftChoices);
@@ -1678,7 +1545,6 @@ export class ChompLineGame {
     }
 
     const targetX = this.yetiTargetDecoy ? this.yetiTargetDecoy.x : this.playerX;
-    // Fast, fair 2,000m Yeti pursuit — faster than cruise (22.5), cleanly outrunnable with Boost (33+)!
     const baseYetiSpeed = 25.8 + Math.min(5.5, (this.distance - 2000) / 700);
     const relativeDz = (baseYetiSpeed - this.speed) * dt;
 
@@ -1686,7 +1552,6 @@ export class ChompLineGame {
     const dx = targetX - this.yetiX;
     this.yetiX += Math.max(-12.5, Math.min(12.5, dx * 3.1)) * dt;
 
-    // Articulated stop-motion Yeti puppet stride, independent waving arms & eager lunge!
     this.yetiStompPhase += dt * 9.8;
     const bounce = Math.abs(Math.sin(this.yetiStompPhase));
     this.yeti.root.position.set(this.yetiX, bounce * 0.52, this.yetiZ);
@@ -1707,7 +1572,6 @@ export class ChompLineGame {
       }
     }
 
-    // Yeti smashes pines (getting scorched/outplayed by roaring Yule bonfires!) or eats decoys!
     for (let i = this.entities.length - 1; i >= 0; i--) {
       const e = this.entities[i];
       if (e.sideDecor) continue;
@@ -1744,7 +1608,6 @@ export class ChompLineGame {
       }
     }
 
-    // Occasional Snowball Throw when player pulls far ahead
     const gap = this.playerZ - this.yetiZ;
     this.yetiSnowballTimer -= dt;
     if (gap > 11.0 && this.yetiSnowballTimer <= 0) {
@@ -1752,38 +1615,33 @@ export class ChompLineGame {
       this.spawnYetiSnowball();
     }
 
-    // Auto-deploy Decoy Snowman right before a bite!
     const distToPlayer = Math.hypot(this.playerX - this.yetiX, this.playerZ - this.yetiZ);
     if (distToPlayer < 4.5 && this.upgrades.decoyCharges > 0 && this.upgrades.decoyCooldown <= 0) {
       this.tryDeployDecoy(true);
       return;
     }
 
-    // CHOMPED CHECK (Vaulting high in the air over the Yeti avoids the bite!)
-    if (distToPlayer < 2.15 && this.playerY < 1.95) {
+    if (distToPlayer < 2.05 && this.playerY < 1.9) {
       this.triggerGameOver();
     }
   }
 
   private spawnYetiSnowball(): void {
-    const mesh = new THREE.Mesh(
-      new THREE.DodecahedronGeometry(0.75, 1),
-      new THREE.MeshStandardMaterial({ color: 0xeaf5ff, roughness: 0.85 })
-    );
+    const mesh = new THREE.Mesh(this.sharedSnowballGeo, this.sharedSnowballMat);
     mesh.position.set(this.yetiX, 2.4, this.yetiZ + 1.0);
     this.scene.add(mesh);
 
-    const leadX = this.playerX + this.playerVx * 0.4;
+    const leadX = this.playerX + this.playerVx * 0.36;
     const dx = leadX - this.yetiX;
     const ddz = Math.max(4, this.playerZ - this.yetiZ);
-    const travelT = 0.65;
+    const travelT = 0.72;
     this.snowballs.push({
       mesh,
       x: this.yetiX,
       y: 2.4,
       z: this.yetiZ + 1.0,
       vx: dx / travelT,
-      vz: ddz / travelT + 5.8,
+      vz: ddz / travelT + 5.2,
     });
   }
 
@@ -1792,12 +1650,12 @@ export class ChompLineGame {
       const sb = this.snowballs[i];
       sb.x += sb.vx * dt;
       sb.z += sb.vz * dt;
-      sb.y = Math.max(0.7, sb.y - dt * 2.6);
+      sb.y = Math.max(0.7, sb.y - dt * 2.5);
       sb.mesh.position.set(sb.x, sb.y, sb.z);
       sb.mesh.rotation.x += dt * 7;
 
       const d = Math.hypot(sb.x - this.playerX, sb.z - this.playerZ);
-      if (d < 1.4 && this.playerY < 1.35 && this.invulnTimer <= 0) {
+      if (d < 1.3 && this.playerY < 1.35 && this.invulnTimer <= 0) {
         this.handlePlayerCrash({ id: -1, kind: 'rock', mesh: sb.mesh, x: sb.x, z: sb.z, radius: 0.7 });
         this.scene.remove(sb.mesh);
         this.snowballs.splice(i, 1);
@@ -1907,22 +1765,19 @@ export class ChompLineGame {
             ? { name: 'Aurora Approach', color: '#55f5cb' }
             : { name: 'The Chomp Line', color: '#ff6e84' };
 
-    const alertText = 'THE CHOMP LINE — Hold F or Click to Outrun the Yeti!';
-
     this.callbacks.onHudUpdate({
       distance: Math.floor(this.distance),
       speedMps: this.speed,
-      isMaxSpeed: boosting || this.speed > 27,
+      isMaxSpeed: boosting || this.speed > 26,
       score: Math.floor(this.score),
       bestDistance: Math.max(this.bestDistance, Math.floor(this.distance)),
       flow: Math.round(this.flow),
       boosting,
-      carveCharge: this.carveCharge,
       comboMult: this.comboMult,
       sectorName: sector.name,
       sectorColor: sector.color,
       yetiActive: this.yetiActive,
-      yetiAlertText: alertText,
+      yetiAlertText: 'THE CHOMP LINE — Hold F or Click to Outrun the Yeti!',
       upgrades: this.upgrades,
     });
   }

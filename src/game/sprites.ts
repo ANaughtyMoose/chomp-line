@@ -21,7 +21,6 @@ export interface DioramaTextures {
   skierBoost: THREE.Texture;
   yeti: THREE.Texture;
   pineTree: THREE.Texture;
-  pineFire: THREE.Texture;
   chalet: THREE.Texture;
   dog: THREE.Texture;
   snowboarder: THREE.Texture;
@@ -105,7 +104,6 @@ export async function loadDioramaTextures(): Promise<DioramaTextures> {
     skierBoost,
     yeti,
     pineTree,
-    pineFire,
     chalet,
     dog,
     snowboarder,
@@ -117,7 +115,6 @@ export async function loadDioramaTextures(): Promise<DioramaTextures> {
     loadTex('/assets/skier_boost.png'),
     loadTex('/assets/yeti.png'),
     loadTex('/assets/pine_tree.png'),
-    loadTex('/assets/pine_fire.png'),
     loadTex('/assets/chalet.png'),
     loadTex('/assets/dog.png'),
     loadTex('/assets/snowboarder.png'),
@@ -131,7 +128,6 @@ export async function loadDioramaTextures(): Promise<DioramaTextures> {
     skierBoost,
     yeti,
     pineTree,
-    pineFire,
     chalet,
     dog,
     snowboarder,
@@ -518,88 +514,141 @@ export function createCandyCaneGate(tex: DioramaTextures, width = 6.6): THREE.Gr
 }
 
 /**
- * Grindable Wooden Alpine Rail / Fence draped with warm glowing fairy lights!
+ * Handcrafted Snow-Jump Mogul Ramp:
+ * Layered pillowy snowdrifts with vintage Alpine wooden ramp slats,
+ * striped launch poles, and an icy-cyan jump glint so it feels cozy & unmistakably jumpable!
  */
-export function createGrindRail(tex: DioramaTextures, length = 11): THREE.Group {
+export function createMogulRamp(tex: DioramaTextures): THREE.Group {
   const g = new THREE.Group();
-  const matWood = new THREE.MeshStandardMaterial({ color: 0x7b4a26, roughness: 0.8 });
-  const matGlow = new THREE.MeshBasicMaterial({ color: 0xffdf85 });
+  const matSnow = new THREE.MeshStandardMaterial({ color: 0xf4f9ff, roughness: 0.86 });
+  const matSnowShadow = new THREE.MeshStandardMaterial({ color: 0xd4e5f9, roughness: 0.88 });
+  const matWood = new THREE.MeshStandardMaterial({ color: 0x7a4824, roughness: 0.85 });
+  const matCandy = new THREE.MeshStandardMaterial({ map: tex.candyStripe, roughness: 0.3 });
 
-  const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, length, 8), matWood);
-  rail.rotation.x = Math.PI / 2;
-  rail.position.y = 1.05;
-  g.add(rail);
+  // Multi-clump sculpted snowdrift mound
+  const mainDrift = new THREE.Mesh(
+    new THREE.SphereGeometry(2.05, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
+    matSnow
+  );
+  mainDrift.scale.set(1.3, 0.44, 1.45);
+  g.add(mainDrift);
 
-  for (let z = -length * 0.44; z <= length * 0.44; z += length * 0.22) {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 1.1, 7), matWood);
-    post.position.set(0, 0.55, z);
-    g.add(post);
+  for (const [ox, oz, s] of [
+    [-1.4, 0.45, 0.72],
+    [1.4, 0.35, 0.68],
+    [0.0, -0.9, 0.78],
+  ]) {
+    const puff = new THREE.Mesh(
+      new THREE.SphereGeometry(1.15 * s, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5),
+      matSnowShadow
+    );
+    puff.scale.set(1.2, 0.42, 1.1);
+    puff.position.set(ox, 0, oz);
+    g.add(puff);
+  }
 
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), matGlow);
-    bulb.position.set(0, 1.24, z);
+  // Vintage wooden Alpine jump slats embedded along the crest
+  for (const ox of [-0.9, 0, 0.9]) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 2.3), matWood);
+    slat.position.set(ox, 0.52, 0.2);
+    slat.rotation.x = 0.24;
+    g.add(slat);
+  }
+
+  // Twin mini striped jump-marker stakes framing the kicker
+  for (const sx of [-1.85, 1.85]) {
+    const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 1.35, 8), matCandy);
+    stake.position.set(sx, 0.65, 0.65);
+    g.add(stake);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x7ef7ff })
+    );
+    bulb.position.set(sx, 1.38, 0.65);
     g.add(bulb);
   }
 
-  addGroundDecal(g, tex.warmGlowDisc, 1.6, length * 0.55, 0.04, true);
+  addGroundDecal(g, tex.cyanGlowDisc, 2.8, 2.8, 0.05, true);
   return g;
 }
 
 /**
- * Frozen Glowing Turquoise Ice Pond (Ultra-fast drift + double Carve Slingshot!)
+ * Handcrafted Frosted Alpine Boulder Cluster:
+ * Multi-stone organic rock cluster topped with pillowy snow caps and a tiny snow-dusted pine sprig.
  */
-export function createIcePond(tex: DioramaTextures, radiusX = 5.4, radiusZ = 7.8): THREE.Group {
-  const g = new THREE.Group();
-  const pond = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 24),
-    new THREE.MeshStandardMaterial({
-      color: 0x4cc9f0,
-      emissive: 0x165e8a,
-      emissiveIntensity: 0.65,
-      roughness: 0.12,
-      metalness: 0.35,
-      transparent: true,
-      opacity: 0.78,
-    })
-  );
-  pond.rotation.x = -Math.PI / 2;
-  pond.scale.set(radiusX, radiusZ, 1);
-  pond.position.y = 0.05;
-  g.add(pond);
-
-  addGroundDecal(g, tex.cyanGlowDisc, radiusX * 1.15, radiusZ * 1.15, 0.06, true);
-  return g;
-}
-
-export function createMogulRamp(tex: DioramaTextures): THREE.Group {
-  const g = new THREE.Group();
-  const mound = new THREE.Mesh(
-    new THREE.SphereGeometry(2.1, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
-    new THREE.MeshStandardMaterial({ color: 0xf0f7ff, roughness: 0.8 })
-  );
-  mound.scale.set(1.25, 0.45, 1.4);
-  g.add(mound);
-  addGroundDecal(g, tex.cyanGlowDisc, 2.6, 2.6, 0.05, true);
-  return g;
-}
-
 export function createSnowRock(tex: DioramaTextures): THREE.Group {
   const g = new THREE.Group();
-  const rock = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(1.1, 0),
-    new THREE.MeshStandardMaterial({ color: 0x47556b, roughness: 0.9 })
-  );
-  rock.scale.set(1.25, 0.75, 1.0);
-  rock.position.y = 0.5;
-  g.add(rock);
+  const matStone = new THREE.MeshStandardMaterial({ color: 0x526178, roughness: 0.92 });
+  const matStoneDark = new THREE.MeshStandardMaterial({ color: 0x3b485c, roughness: 0.95 });
+  const matSnow = new THREE.MeshStandardMaterial({ color: 0xf2f8ff, roughness: 0.85 });
+  const matPine = new THREE.MeshStandardMaterial({ color: 0x1b523d, roughness: 0.88 });
 
-  const cap = new THREE.Mesh(
-    new THREE.SphereGeometry(0.95, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.48),
-    new THREE.MeshStandardMaterial({ color: 0xeef6ff, roughness: 0.85 })
+  // Clustered irregular stones (never a single bare polygon!)
+  const stones = [
+    { x: 0, y: 0.52, z: 0, sx: 1.25, sy: 0.82, sz: 1.0, r: 0.95, m: matStone },
+    { x: -0.78, y: 0.34, z: 0.32, sx: 0.9, sy: 0.65, sz: 0.85, r: 0.62, m: matStoneDark },
+    { x: 0.76, y: 0.32, z: -0.22, sx: 0.85, sy: 0.6, sz: 0.82, r: 0.58, m: matStoneDark },
+  ];
+  for (const s of stones) {
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s.r, 1), s.m);
+    rock.scale.set(s.sx, s.sy, s.sz);
+    rock.position.set(s.x, s.y, s.z);
+    rock.rotation.set(s.x * 0.5, s.z * 1.4, 0.2);
+    g.add(rock);
+
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(s.r * 0.92, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.48),
+      matSnow
+    );
+    cap.scale.set(s.sx * 0.95, s.sy * 0.55, s.sz * 0.95);
+    cap.position.set(s.x, s.y + s.r * s.sy * 0.38, s.z);
+    g.add(cap);
+  }
+
+  // Tiny cozy evergreen tuft peeking beside the boulder
+  const sprig = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.72, 7), matPine);
+  sprig.position.set(-0.95, 0.42, 0.55);
+  sprig.rotation.z = 0.22;
+  g.add(sprig);
+
+  addGroundDecal(g, tex.shadowDisc, 1.8, 1.25, 0.04, false);
+  return g;
+}
+
+/**
+ * Festive Personal-Best Record Flag planted in the snow at your previous Best Run!
+ */
+export function createBestFlag(tex: DioramaTextures): THREE.Group {
+  const g = new THREE.Group();
+  const matWood = new THREE.MeshStandardMaterial({ color: 0x7c4824, roughness: 0.84 });
+  const matFlag = new THREE.MeshBasicMaterial({ color: 0xffcf54, side: THREE.DoubleSide });
+
+  for (const side of [-1, 1]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 4.4, 8), matWood);
+    pole.position.set(side * 8.5, 2.2, 0);
+    g.add(pole);
+
+    const pennant = new THREE.Mesh(new THREE.ConeGeometry(0.62, 1.8, 3), matFlag);
+    pennant.rotation.z = side * -Math.PI * 0.5;
+    pennant.position.set(side * 7.6, 3.85, 0);
+    g.add(pennant);
+  }
+
+  // Sparkling gold record line across the snow!
+  const line = new THREE.Mesh(
+    new THREE.PlaneGeometry(17, 0.42),
+    new THREE.MeshBasicMaterial({
+      color: 0xffd766,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide,
+    })
   );
-  cap.scale.set(1.2, 0.45, 0.95);
-  cap.position.y = 0.85;
-  g.add(cap);
-  addGroundDecal(g, tex.shadowDisc, 1.6, 1.1, 0.04, false);
+  line.rotation.x = -Math.PI / 2;
+  line.position.y = 0.07;
+  g.add(line);
+
+  addGroundDecal(g, tex.warmGlowDisc, 8.8, 1.5, 0.05, true);
   return g;
 }
 
