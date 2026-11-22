@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CHOMP LINE — Alpine Holiday Escape</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❄️</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;0,9..144,900;1,9..144,700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- Top-Left: Mountain Sector, Carve/Flow Meter & Active Build -->
+      <div id="hud-left" class="hud-left hidden">
+        <div class="sector-pill">
+          <span class="sector-dot" id="zone-dot"></span>
+          <span id="zone-name">Starlight Village</span>
+          <span class="combo-pill hidden" id="combo-pill">×1.0</span>
+        </div>
+
+        <div class="meter-card">
+          <div class="meter-row">
+            <span class="meter-label">Flow Boost <kbd>F</kbd> / Click</span>
+            <span class="meter-val" id="flow-pct">100%</span>
+          </div>
+          <div class="meter-track">
+            <div class="meter-fill" id="flow-fill"></div>
+          </div>
+
+          <div class="meter-row sub-meter">
+            <span class="meter-label">Carve Slingshot</span>
+            <span class="meter-val subtle" id="carve-state">Carve hard</span>
+          </div>
+          <div class="meter-track thin">
+            <div class="carve-fill" id="carve-fill"></div>
+          </div>
+        </div>
+
+        <div class="gear-bar" id="gear-bar"></div>
+      </div>
+
+      <!-- Top-Right: Modern Frosted-Glass & Brushed Brass Alpine Gauge -->
+      <div id="hud-right" class="hud-right hidden">
+        <div class="brass-badge">
+          <div class="badge-row">
+            <span class="badge-key">DIST</span>
+            <span class="badge-val" id="hud-dist">0 m</span>
+          </div>
+          <div class="badge-row">
+            <span class="badge-key">SPEED</span>
+            <span class="badge-val" id="hud-speed">36 mph</span>
+          </div>
+          <div class="badge-sub">
+            <span id="hud-score">0 pts</span>
+            <span class="badge-sep">•</span>
+            <span id="hud-best">Best 0 m</span>
+          </div>
+        </div>
+
+        <div class="hud-actions">
+          <button id="btn-music" class="icon-btn" title="Toggle Music (M)">🎵</button>
+          <button id="btn-sfx" class="icon-btn" title="Toggle Sound FX (N)">🔊</button>
+          <button id="btn-pause" class="icon-btn" title="Pause (P / Esc)">⏸</button>
+        </div>
+      </div>
+
+      <!-- Yeti Encounter Banner (Modern Cinematic Pill) -->
+      <div id="yeti-alert" class="yeti-alert hidden">
+        <span class="yeti-pulse"></span>
+        <span id="yeti-alert-text">Yeti Ambush — Lure into a Bonfire or Carve-Boost past!</span>
+      </div>
+
+      <!-- Cinematic Milestone Banner (Replaces jarring retro fullscreen popup) -->
+      <div id="milestone-banner" class="milestone-banner hidden">
+        <div class="milestone-eyebrow" id="milestone-eyebrow">2,000 METERS</div>
+        <div class="milestone-title" id="milestone-title">THE CHOMP LINE</div>
+        <div class="milestone-sub" id="milestone-sub">Hold F or Click to Boost — Outplay the Yeti!</div>
+      </div>
+
+      <!-- Floating Trick / Combo / Outplay Toasts -->
+      <div id="toast-layer" class="toast-layer"></div>
+
+      <!-- Title Overlay (Elegant translucent glass over the live stop-motion snow-globe diorama) -->
+      <div id="title-screen" class="overlay-screen">
+        <div class="title-card">
+          <div class="title-eyebrow">WINTER DIORAMA ALPINE ESCAPE</div>
+          <h1 class="title-logo">Chomp Line</h1>
+          <p class="title-sub">
+            Carve glossy powder through an illuminated Christmas mountain, grind festive chalet rails, nail big-air stomps, and outplay the snow-globe Yeti.
+          </p>
+
+          <div class="controls-grid">
+            <div class="ctrl-item">
+              <span class="ctrl-keys">Mouse or ← → / A D</span>
+              <span class="ctrl-desc">Carve hard to charge Slingshot</span>
+            </div>
+            <div class="ctrl-item">
+              <span class="ctrl-keys">Hold Space in Air</span>
+              <span class="ctrl-desc">Spin Tricks &amp; Perfect Stomp</span>
+            </div>
+            <div class="ctrl-item">
+              <span class="ctrl-keys">Hold F / Shift / Click</span>
+              <span class="ctrl-desc">Flow Boost &amp; Outrun Yeti</span>
+            </div>
+            <div class="ctrl-item">
+              <span class="ctrl-keys">E</span>
+              <span class="ctrl-desc">Drop Decoy Snowman</span>
+            </div>
+          </div>
+
+          <div class="title-cta-row">
+            <button id="btn-play" class="primary-btn">Drop In &amp; Ski</button>
+          </div>
+          <div class="title-best" id="title-best">Best Descent: 0 m</div>
+        </div>
+      </div>
+
+      <!-- Mid-Run Alpine Lodge Upgrade Draft -->
+      <div id="upgrade-screen" class="overlay-screen hidden">
+        <div class="upgrade-modal">
+          <div class="upgrade-eyebrow" id="upgrade-eyebrow">ALPINE LODGE • 650 m</div>
+          <h2 class="upgrade-title">Choose Your Mountain Gear</h2>
+          <p class="upgrade-hint">Click a card or press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></p>
+          <div class="upgrade-cards" id="upgrade-cards"></div>
+        </div>
+      </div>
+
+      <!-- Pause Overlay -->
+      <div id="pause-screen" class="overlay-screen hidden">
+        <div class="title-card compact">
+          <div class="title-eyebrow">FIRESIDE BREAK</div>
+          <h2 class="upgrade-title">Run Paused</h2>
+          <div class="title-cta-row">
+            <button id="btn-resume" class="primary-btn">Resume Run</button>
+            <button id="btn-restart-pause" class="secondary-btn">Restart</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Over / Modern Alpine Season Pass Summary -->
+      <div id="gameover-screen" class="overlay-screen hidden">
+        <div class="pass-card">
+          <div class="pass-header">
+            <span class="pass-stamp" id="pass-stamp">Chomped at 2,048 m</span>
+            <span class="pass-season">Alpine Pass • ’91–’26</span>
+          </div>
+          <h2 class="pass-headline" id="pass-headline">Caught by the Yeti</h2>
+          <p class="pass-flavor" id="pass-flavor">
+            Pro tip: Snap out of sharp turns for free Carve Slingshots, grind wooden fences, and lure the Yeti straight into roaring Yule bonfires!
+          </p>
+
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">Distance</div>
+              <div class="stat-value" id="stat-dist">0 m</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Score</div>
+              <div class="stat-value" id="stat-score">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Tricks &amp; Outplays</div>
+              <div class="stat-value" id="stat-tricks">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Best Descent</div>
+              <div class="stat-value highlight" id="stat-best">0 m</div>
+            </div>
+          </div>
+
+          <div class="pass-gear" id="pass-gear"></div>
+
+          <div class="title-cta-row">
+            <button id="btn-retry" class="primary-btn">One More Run (Space)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
