@@ -25,5 +25,8 @@ Then open **http://localhost:5173/**.
 - `src/game/puppetShader.ts` — Clean vertex-shader scarf-tip flutter & whole-body spring squash/stretch (preserving crisp undistorted character expressions)
 - `src/game/shaders.ts` — Aurora Borealis twilight horizon shader + macro tilt-shift snow-globe post-processing pass
 - `src/game/snowTrail.ts` — Endless ring-buffer 1024×1024 glossy sapphire ski-trench & Yeti footprint trail canvas
-- `src/game/audio.ts` — Speed-accelerating major-key public-domain Christmas soundtrack (*Jingle Bells*, *Deck the Halls*, *Trepak*) + tactile alpine carving/wind SFX
+- `src/game/audio.ts` — Real recorded royalty-free Christmas soundtrack (*Deck the Halls B* & *Jingle Bells* by Kevin MacLeod, CC BY 4.0) with pitch-preserved speed acceleration + tactile alpine snow-carving SFX
 - `src/game/upgrades.ts` — Synergistic mountain lodge gear draft system
+
+## Music Credits
+- *"Deck the Halls B"* & *"Jingle Bells"* by Kevin MacLeod ([incompetech.com](https://incompetech.com)) — Licensed under [Creative Commons: By Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).

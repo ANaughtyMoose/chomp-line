@@ -499,7 +499,21 @@ export function createCandyCaneGate(tex: DioramaTextures, width = 6.6): THREE.Gr
     g.add(cane);
   }
 
-  addGroundDecal(g, tex.warmGlowDisc, width * 0.55, 1.35, 0.045, true);
+  // Crisp glowing golden-yellow slalom ribbon stretched cleanly between the two candy canes!
+  const yellowLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(width - 0.3, 0.5),
+    new THREE.MeshBasicMaterial({
+      color: 0xffe45e,
+      transparent: true,
+      opacity: 0.88,
+      side: THREE.DoubleSide,
+    })
+  );
+  yellowLine.rotation.x = -Math.PI / 2;
+  yellowLine.position.y = 0.08;
+  g.add(yellowLine);
+
+  addGroundDecal(g, tex.warmGlowDisc, width * 0.52, 1.2, 0.045, true);
   return g;
 }
 

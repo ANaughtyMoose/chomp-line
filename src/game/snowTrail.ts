@@ -114,7 +114,7 @@ export class SnowTrailSurface {
     boosting: boolean,
     carvingHard: boolean
   ): void {
-    const halfStance = 0.64;
+    const halfStance = 0.62;
     const cos = Math.cos(headingAngle);
     const sin = Math.sin(headingAngle);
 
@@ -123,24 +123,24 @@ export class SnowTrailSurface {
       const sz = worldZ + side * halfStance * sin * 0.35;
       const { cx, cy } = this.worldToCanvas(sx, sz);
 
-      // Crisp twin parallel sapphire-blue glossy ski grooves with snow visible between them!
+      // Soft, delicate snow-pressed ski grooves (subtle & tactile, never a harsh dark stripe!)
       if (flaming) {
-        this.ctx.fillStyle = 'rgba(235, 96, 22, 0.85)';
+        this.ctx.fillStyle = 'rgba(245, 138, 56, 0.45)';
       } else if (boosting) {
-        this.ctx.fillStyle = 'rgba(22, 118, 212, 0.82)';
+        this.ctx.fillStyle = 'rgba(128, 178, 228, 0.38)';
       } else {
-        this.ctx.fillStyle = 'rgba(38, 108, 192, 0.72)';
+        this.ctx.fillStyle = 'rgba(155, 188, 226, 0.28)';
       }
       this.ctx.beginPath();
-      this.ctx.arc(cx, cy, boosting || carvingHard ? 3.1 : 2.35, 0, Math.PI * 2);
+      this.ctx.arc(cx, cy, boosting || carvingHard ? 2.6 : 2.0, 0, Math.PI * 2);
       this.ctx.fill();
 
-      // Glossy cyan-white specular sheen inside each groove
+      // Whisper-soft frosted specular catchlight along the groove
       this.ctx.fillStyle = flaming
-        ? 'rgba(255, 236, 148, 0.9)'
-        : 'rgba(155, 226, 255, 0.76)';
+        ? 'rgba(255, 232, 160, 0.55)'
+        : 'rgba(255, 255, 255, 0.42)';
       this.ctx.beginPath();
-      this.ctx.arc(cx - 0.5, cy, boosting ? 1.35 : 1.0, 0, Math.PI * 2);
+      this.ctx.arc(cx - 0.6, cy, 0.9, 0, Math.PI * 2);
       this.ctx.fill();
     }
     this.texture.needsUpdate = true;

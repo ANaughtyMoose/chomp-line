@@ -200,20 +200,19 @@ export class ChompLineGame {
   private smoothAir = 0;
   private facingDir = 1; // 1 = left-facing sprite default, -1 = mirrored right-facing
 
-  // Dynamic Mountain & Yeti Encounter Phases
-  private yetiPhase = 0; // 0: pre-ambush, 1: 450m Ambush, 2: 1200m Avalanche Hunt, 3: 2000m+ Chomp Line!
+  // 2,000m Chomp Line Yeti State (Pure anticipation & payoff — no early ambush interruptions!)
+  private yetiTriggered = false;
   private yetiActive = false;
-  private yetiEscapeStartDist = 0;
   private yetiX = 0;
   private yetiZ = -24;
   private yetiStunTimer = 0;
   private yetiStompPhase = 0;
   private yetiLastStompStep = -1;
-  private yetiSnowballTimer = 3.8;
+  private yetiSnowballTimer = 4.2;
   private yetiTargetDecoy: SlopeEntity | null = null;
   private yetiVictoryDance = false;
 
-  private nextLodgeDist = 720;
+  private nextLodgeDist = 650;
   private spawnAccum = 0;
   private decorAccum = 0;
   private trailStampAccum = 0;
@@ -535,7 +534,7 @@ export class ChompLineGame {
     this.facingDir = 1;
     this.skier.setPose('straight');
 
-    this.yetiPhase = 0;
+    this.yetiTriggered = false;
     this.yetiActive = false;
     this.yetiX = 0;
     this.yetiZ = -26;
@@ -544,7 +543,7 @@ export class ChompLineGame {
     this.yetiVictoryDance = false;
     this.yeti.root.visible = false;
 
-    this.nextLodgeDist = 720;
+    this.nextLodgeDist = 650;
     this.spawnAccum = 0;
     this.decorAccum = 0;
     this.upgrades = createInitialUpgrades();
@@ -606,13 +605,13 @@ export class ChompLineGame {
     for (let z = -54; z <= 30; z += 7.0) {
       this.spawnSideDecorAt(z);
     }
-    // Clean, festive starting slope with clear sightlines (no unexplained burning trees!)
+    // Crisp, rhythmic, uncluttered starting slope!
     this.spawnGate(0, 12);
-    this.spawnPine(11.0, 10);
-    this.spawnPine(-10.5, 14);
-    this.spawnDog(-9.0, 19);
-    this.spawnRail(5.2, 24);
-    this.spawnMogul(-4.0, 28);
+    this.spawnPine(10.5, 11);
+    this.spawnPine(-10.5, 15);
+    this.spawnDog(-9.5, 19);
+    this.spawnGate(-3.5, 24);
+    this.spawnMogul(4.5, 28);
   }
 
   private spawnSideDecorAt(z: number): void {
@@ -1115,18 +1114,12 @@ export class ChompLineGame {
       this.grindSparkAccum += dt;
       if (this.grindSparkAccum > 0.055) {
         this.grindSparkAccum = 0;
-        this.sound.playRailSpark();
         this.spawnBurst(this.playerX, 1.15, this.playerZ - 0.3, 3, 0xffd770, 5.2, true);
       }
       const halfL = (this.grindingRail.railLength || 11.5) * 0.5;
       if (this.playerZ < this.grindingRail.z - halfL || this.playerZ > this.grindingRail.z + halfL + 1.0) {
-        // Clean dismount!
         this.grindingRail = null;
         this.playerVy = 6.8;
-        this.bumpCombo(0.5);
-        this.tricksAndOutplays += 1;
-        this.callbacks.onToast(`✨ Rail Grind Dismount! ×${this.comboMult.toFixed(1)}`, 'good');
-        if (this.upgrades.levels.rail_striker > 0) this.triggerRailLightning();
       }
     } else {
       const targetVx = steerInput * maxLatSpeed;
@@ -1226,8 +1219,7 @@ export class ChompLineGame {
     this.sound.updateCarve(
       Math.min(1, (this.speed - 10) / 22),
       Math.abs(this.playerVx) / 16,
-      this.playerY > 0.1 || this.grindingRail !== null,
-      this.onIcePond
+      this.playerY > 0.1 || this.grindingRail !== null
     );
 
     // 4. Glossy Carved Snow Tracks & Continuous Rooster-Tail Carving Powder Spray!
@@ -1383,55 +1375,29 @@ export class ChompLineGame {
       this.yetiZ -= 6.5;
       this.tricksAndOutplays += 1;
       this.callbacks.onToast('❄️ Avalanche Stomp Knocked Back the Yeti!', 'good');
-      if (this.yetiPhase < 3) this.banishYetiEarly();
     }
   }
 
   private checkYetiPhaseTriggers(): void {
-    // Phase 1: 450m Early Ambush!
-    if (this.yetiPhase === 0 && this.distance >= 450) {
-      this.startYetiEncounter(1, '450 METERS', 'Yeti Ambush!', 'Outrun him or lure him into a bonfire for a Bounty + Gear!');
+    // Save the Yeti's iconic grand entrance for 2,000 meters — pure anticipation & payoff!
+    if (!this.yetiTriggered && this.distance >= 2000) {
+      this.yetiTriggered = true;
+      this.yetiActive = true;
+      this.yetiX = this.playerX + (this.playerX > 0 ? -4.5 : 4.5);
+      this.yetiZ = this.playerZ - 16.5;
+      this.yetiStunTimer = 0;
+      this.yeti.root.position.set(this.yetiX, 0, this.yetiZ);
+      this.yeti.root.visible = true;
+      this.screenShake = 0.85;
+      this.flow = Math.min(100, this.flow + 50);
+      this.sound.playYetiRoar();
+      this.sound.setChaseMode(true); // Kicks into fast manic Jingle Bells!
+      this.callbacks.onMilestone(
+        '2,000 METERS',
+        'THE CHOMP LINE',
+        'Hold F or Click to Boost — Outrun the Yeti!'
+      );
     }
-    // Phase 2: 1,200m Avalanche Hunt!
-    else if (this.yetiPhase === 1 && !this.yetiActive && this.distance >= 1200) {
-      this.startYetiEncounter(2, '1,200 METERS', 'Avalanche Hunt', 'Watch for giant snowballs — chain rails & slingshots!');
-    }
-    // Phase 3: 2,000m THE CHOMP LINE (Classic SkiFree nod, modern cinematic style!)
-    else if (this.yetiPhase < 3 && this.distance >= 2000) {
-      this.startYetiEncounter(3, '2,000 METERS', 'THE CHOMP LINE', 'Endless Aurora Frenzy — Hold F or Click to survive!');
-    }
-  }
-
-  private startYetiEncounter(phase: number, eyebrow: string, title: string, sub: string): void {
-    this.yetiPhase = phase;
-    this.yetiActive = true;
-    this.yetiEscapeStartDist = this.distance;
-    this.yetiX = this.playerX + (this.playerX > 0 ? -4.5 : 4.5);
-    this.yetiZ = this.playerZ - 16.5;
-    this.yetiStunTimer = 0;
-    this.yeti.root.position.set(this.yetiX, 0, this.yetiZ);
-    this.yeti.root.visible = true;
-    this.screenShake = 0.85;
-    this.flow = Math.min(100, this.flow + 40);
-    this.sound.playYetiRoar();
-    this.sound.setChaseMode(true); // Kicks into Carol of the Bells!
-    this.callbacks.onMilestone(eyebrow, title, sub);
-  }
-
-  private banishYetiEarly(): void {
-    if (!this.yetiActive || this.yetiPhase >= 3) return;
-    this.yetiActive = false;
-    this.yeti.root.visible = false;
-    this.sound.playYetiBanished();
-    this.sound.setChaseMode(false);
-    const bounty = this.yetiPhase === 1 ? 600 : 1000;
-    this.score += Math.round(bounty * this.comboMult);
-    this.tricksAndOutplays += 1;
-    this.bumpCombo(1.0);
-    this.spawnBurst(this.yetiX, 2.5, this.yetiZ, 28, 0x62f5ff, 9.0, true);
-    this.callbacks.onToast(`🏆 Yeti Outplayed! +${bounty} Bounty`, 'good');
-    // Drop a glowing Alpine Lodge Arch cleanly ahead so you stay in flow!
-    this.spawnLodgeArch(29);
   }
 
   private updateSpawners(dz: number): void {
@@ -1443,37 +1409,35 @@ export class ChompLineGame {
 
     if (this.distance >= this.nextLodgeDist - 30) {
       this.spawnLodgeArch(30);
-      this.nextLodgeDist += 760;
+      this.nextLodgeDist += this.nextLodgeDist < 1950 ? 650 : 850;
     }
 
-    const densityMeters = Math.max(5.2, 8.6 - this.distance / 820);
+    // Crisp, rhythmic, uncluttered arcade slope!
+    const densityMeters = Math.max(5.4, 8.8 - this.distance / 900);
     this.spawnAccum += dz;
     if (this.spawnAccum >= densityMeters) {
       this.spawnAccum -= densityMeters;
       const z = 28 + Math.random() * 5;
       const roll = Math.random();
 
-      if (roll < 0.36) {
+      if (roll < 0.44) {
         const x1 = (Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.8);
         this.spawnPine(x1, z);
-        if (Math.random() < 0.42) {
-          const x2 = x1 + (Math.random() < 0.5 ? -5.8 : 5.8);
-          if (Math.abs(x2) < this.PLAY_HALF_WIDTH) this.spawnPine(x2, z + 2.2);
+        if (Math.random() < 0.4) {
+          const x2 = x1 + (Math.random() < 0.5 ? -6.2 : 6.2);
+          if (Math.abs(x2) < this.PLAY_HALF_WIDTH) this.spawnPine(x2, z + 2.4);
         }
-      } else if (roll < 0.50) {
-        this.spawnGate((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.25), z);
-      } else if (roll < 0.62) {
-        this.spawnRail((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.35), z);
-      } else if (roll < 0.72) {
-        this.spawnIcePond((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.1), z + 2);
-      } else if (roll < 0.82) {
-        this.spawnMogul((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.45), z);
-      } else if (roll < 0.88) {
+      } else if (roll < 0.67) {
+        // Frequent Candy-Cane Slalom Gates with bright yellow ribbon!
+        this.spawnGate((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.2), z);
+      } else if (roll < 0.79) {
+        this.spawnMogul((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.4), z);
+      } else if (roll < 0.86) {
         this.spawnRock((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.65), z);
-      } else if (roll < 0.93) {
+      } else if (roll < 0.92) {
         const dx = Math.random() < 0.5 ? -this.PLAY_HALF_WIDTH + 1 : this.PLAY_HALF_WIDTH - 1;
         this.spawnDog(dx, z);
-      } else if (roll < 0.97) {
+      } else if (roll < 0.96) {
         this.spawnBoarder((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.4), z);
       } else {
         this.spawnCocoa((Math.random() - 0.5) * (this.PLAY_HALF_WIDTH * 1.4), z);
@@ -1555,7 +1519,6 @@ export class ChompLineGame {
         continue;
       }
 
-      // Forgiving Festive Rail Grind catch (hop onto it OR ski right into the entry end!)
       if (e.kind === 'rail' && !this.grindingRail) {
         const halfL = (e.railLength || 11.5) * 0.5;
         const nearEntry = Math.abs(ddz - halfL) < 2.2 && this.playerY < 1.2;
@@ -1566,7 +1529,6 @@ export class ChompLineGame {
           this.airSpinDegrees = 0;
           this.squashPos = -0.16;
           this.squashVel = -1.2;
-          this.sound.playRailSpark();
           this.callbacks.onToast('⚡ Festive Rail Grind!', 'fire');
         }
         continue;
@@ -1702,12 +1664,6 @@ export class ChompLineGame {
   }
 
   private updateYeti(dt: number, dz: number): void {
-    // Surviving an early ambush phase (Phase 1 or 2) for ~340m banishes the Yeti!
-    if (this.yetiPhase < 3 && this.distance - this.yetiEscapeStartDist >= 340) {
-      this.banishYetiEarly();
-      return;
-    }
-
     if (this.yetiStunTimer > 0) {
       this.yetiStunTimer -= dt;
       this.yetiZ -= dz * 0.72;
@@ -1725,13 +1681,8 @@ export class ChompLineGame {
     }
 
     const targetX = this.yetiTargetDecoy ? this.yetiTargetDecoy.x : this.playerX;
-    // Yeti speed scales tightly with our faster accelerating pace so he stays exciting!
-    const baseYetiSpeed =
-      this.yetiPhase === 1
-        ? 27.5
-        : this.yetiPhase === 2
-          ? 30.8
-          : 33.5 + Math.min(8.5, (this.distance - 2000) / 550);
+    // Fast, thrilling 2,000m Yeti pursuit — hold F / Click or chain Slalom Gates to outrun!
+    const baseYetiSpeed = 33.5 + Math.min(9.5, (this.distance - 2000) / 520);
     const relativeDz = (baseYetiSpeed - this.speed) * dt;
 
     this.yetiZ = Math.max(-22.5, this.yetiZ + relativeDz);
@@ -1773,11 +1724,7 @@ export class ChompLineGame {
         this.sound.playChomp();
         this.scene.remove(e.mesh);
         this.entities.splice(i, 1);
-        if (this.yetiPhase < 3) {
-          this.banishYetiEarly();
-        } else {
-          this.callbacks.onToast('⛄ Yeti Chomped the Decoy! Run!', 'good');
-        }
+        this.callbacks.onToast('⛄ Yeti Chomped the Decoy! Run!', 'good');
         return;
       }
 
@@ -1787,16 +1734,11 @@ export class ChompLineGame {
           this.sound.playFireIgnite();
           this.scene.remove(e.mesh);
           this.entities.splice(i, 1);
-          if (this.yetiPhase < 3) {
-            this.banishYetiEarly();
-            return;
-          } else {
-            this.yetiStunTimer = 2.4;
-            this.yetiZ -= 5.0;
-            this.score += Math.round(450 * this.comboMult);
-            this.tricksAndOutplays += 1;
-            this.callbacks.onToast('🔥 Bonfire Outplay! +450', 'fire');
-          }
+          this.yetiStunTimer = 2.4;
+          this.yetiZ -= 5.0;
+          this.score += Math.round(450 * this.comboMult);
+          this.tricksAndOutplays += 1;
+          this.callbacks.onToast('🔥 Bonfire Outplay! +450', 'fire');
         } else {
           this.spawnBurst(e.x, 2.0, e.z, 10, 0xffffff, 6.2);
           this.scene.remove(e.mesh);
@@ -1805,11 +1747,11 @@ export class ChompLineGame {
       }
     }
 
-    // Phase 2 & 3 Snowball Throws!
+    // Occasional Snowball Throw when player pulls far ahead
     const gap = this.playerZ - this.yetiZ;
     this.yetiSnowballTimer -= dt;
-    if (this.yetiPhase >= 2 && gap > 10.5 && this.yetiSnowballTimer <= 0) {
-      this.yetiSnowballTimer = 3.8 + Math.random() * 2.0;
+    if (gap > 11.0 && this.yetiSnowballTimer <= 0) {
+      this.yetiSnowballTimer = 4.2 + Math.random() * 2.0;
       this.spawnYetiSnowball();
     }
 
@@ -1960,18 +1902,15 @@ export class ChompLineGame {
 
   private emitHud(boosting: boolean): void {
     const sector =
-      this.distance < 450
+      this.distance < 700
         ? { name: 'Starlight Village', color: '#ffd470' }
-        : this.distance < 1200
+        : this.distance < 1400
           ? { name: 'Timberline Ridge', color: '#62d9ff' }
           : this.distance < 2000
-            ? { name: 'Aurora Glacier', color: '#55f5cb' }
+            ? { name: 'Aurora Approach', color: '#55f5cb' }
             : { name: 'The Chomp Line', color: '#ff6e84' };
 
-    const alertText =
-      this.yetiPhase < 3
-        ? 'Yeti Ambush — Lure into a Bonfire or Carve-Boost to Banish!'
-        : 'THE CHOMP LINE — Hold F or Click to Outrun the Yeti!';
+    const alertText = 'THE CHOMP LINE — Hold F or Click to Outrun the Yeti!';
 
     this.callbacks.onHudUpdate({
       distance: Math.floor(this.distance),
